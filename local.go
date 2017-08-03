@@ -54,19 +54,7 @@ func (b *SimpleLocalStore) Keys() ([]string, error) {
 	return res, err
 }
 
-func (b *SimpleLocalStore) List() ([][]byte, error) {
-	res := [][]byte{}
-	err := b.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(b.bucket)
-		return bucket.ForEach(func(k, v []byte) error {
-			res = append(res, v)
-			return nil
-		})
-	})
-	return res, err
-}
-
-func (b *SimpleLocalStore) Load(key string) ([]byte, error) {
+func (b *SimpleLocalStore) Load(key string, val interface{}) error {
 	var res []byte
 	err := b.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(b.bucket)
@@ -76,16 +64,23 @@ func (b *SimpleLocalStore) Load(key string) ([]byte, error) {
 		}
 		return nil
 	})
-	return res, err
+	if err != nil {
+		return err
+	}
+	return b.Decode(res, val)
 }
 
-func (b *SimpleLocalStore) Save(key string, val []byte) error {
+func (b *SimpleLocalStore) Save(key string, val interface{}) error {
 	if b.ReadOnly() {
 		return UnWritable(key)
 	}
+	buf, err := b.Encode(val)
+	if err != nil {
+		return err
+	}
 	return b.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(b.bucket)
-		return bucket.Put([]byte(key), val)
+		return bucket.Put([]byte(key), buf)
 	})
 }
 

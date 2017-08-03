@@ -41,29 +41,24 @@ func (b *SimpleConsulStore) Keys() ([]string, error) {
 	return res, nil
 }
 
-func (b *SimpleConsulStore) List() ([][]byte, error) {
-	pairs, _, err := b.kv.List(b.baseKey, nil)
+func (b *SimpleConsulStore) Load(key string, val interface{}) error {
+	buf, _, err := b.kv.Get(b.finalKey(key), nil)
+	if buf == nil {
+		return NotFound(key)
+	}
 	if err != nil {
-		return nil, err
+		return err
 	}
-	res := make([][]byte, len(pairs))
-	for i := range pairs {
-		res[i] = pairs[i].Value
-	}
-	return res, nil
+	return b.Decode(buf.Value, val)
 }
 
-func (b *SimpleConsulStore) Load(key string) ([]byte, error) {
-	val, _, err := b.kv.Get(b.finalKey(key), nil)
-	if val == nil {
-		return nil, NotFound(key)
+func (b *SimpleConsulStore) Save(key string, val interface{}) error {
+	buf, err := b.Encode(val)
+	if err != nil {
+		return err
 	}
-	return val.Value, err
-}
-
-func (b *SimpleConsulStore) Save(key string, val []byte) error {
-	kp := &consul.KVPair{Value: val, Key: b.finalKey(key)}
-	_, err := b.kv.Put(kp, nil)
+	kp := &consul.KVPair{Value: buf, Key: b.finalKey(key)}
+	_, err = b.kv.Put(kp, nil)
 	return err
 }
 

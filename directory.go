@@ -63,24 +63,28 @@ func (f *DirStore) Keys() ([]string, error) {
 	return res[:], nil
 }
 
-func (f *DirStore) Load(key string) ([]byte, error) {
-	return ioutil.ReadFile(f.name(key))
+func (f *DirStore) Load(key string, val interface{}) error {
+	buf, err := ioutil.ReadFile(f.name(key))
+	if err != nil {
+		return err
+	}
+	return f.Decode(buf, val)
 }
 
-func (f *DirStore) List() ([][]byte, error) {
-	return genericList(f)
-}
-
-func (f *DirStore) Save(key string, val []byte) error {
+func (f *DirStore) Save(key string, val interface{}) error {
 	if f.ReadOnly() {
 		return UnWritable(key)
+	}
+	buf, err := f.Encode(val)
+	if err != nil {
+		return err
 	}
 	file, err := os.Create(f.name(key))
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	_, err = file.Write(val)
+	_, err = file.Write(buf)
 	if err != nil {
 		os.Remove(file.Name())
 		return err

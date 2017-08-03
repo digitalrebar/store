@@ -12,35 +12,18 @@ type SimpleStore interface {
 	Sub(string) (SimpleStore, error)
 	// Return the list of keys that this store has in no particular order.
 	Keys() ([]string, error)
-	// Return all the data in the store in no particular order.
-	List() ([][]byte, error)
 	// Load the data for a particular key
-	Load(string) ([]byte, error)
+	Load(string, interface{}) error
 	// Save data to a key
-	Save(string, []byte) error
+	Save(string, interface{}) error
 	// Remove a key/value pair.
 	Remove(string) error
 	// Encode and decode objects to be saved.
 	Encode(interface{}) ([]byte, error)
 	Decode([]byte, interface{}) error
+	// Control the writeability of the store
 	ReadOnly() bool
 	SetReadOnly() bool
-}
-
-func genericList(s SimpleStore) ([][]byte, error) {
-	keys, err := s.Keys()
-	if err != nil {
-		return nil, fmt.Errorf("Error getting keys: %#v", err)
-	}
-	res := make([][]byte, len(keys))
-	for i := range keys {
-		val, err := s.Load(keys[i])
-		if err != nil {
-			return nil, fmt.Errorf("Error loading key: %#v", err)
-		}
-		res[i] = val
-	}
-	return res, nil
 }
 
 // NotFound is the "key not found" error type.

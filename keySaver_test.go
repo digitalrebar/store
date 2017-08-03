@@ -166,7 +166,7 @@ func runTests(t *testing.T, toRun []test) {
 func testStore(t *testing.T) {
 	runTests(t, tests)
 	// At the end, the store should be empty
-	ents, err := ListRaw(currentStore)
+	ents, err := currentStore.Keys()
 	if err != nil {
 		t.Errorf("Error listing store: %v", err)
 	} else if len(ents) != 0 {

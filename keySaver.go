@@ -92,11 +92,7 @@ type AfterSaveHooker interface {
 }
 
 func load(s SimpleStore, k KeySaver, key string, runhook bool) (bool, error) {
-	buf, err := s.Load(key)
-	if err != nil {
-		return false, err
-	}
-	err = s.Decode(buf, &k)
+	err := s.Load(key, k)
 	if err != nil {
 		return false, err
 	}
@@ -106,24 +102,18 @@ func load(s SimpleStore, k KeySaver, key string, runhook bool) (bool, error) {
 	return true, nil
 }
 
-// ListRaw returns a slice of byte slices, one for each Key in the
-// SimpleStore
-func ListRaw(s SimpleStore) ([][]byte, error) {
-	return s.List()
-}
-
 // List returns a slice of KeySavers, which can then be cast
 // back to whatever type is appropriate by the calling code.
 func List(ref KeySaver) ([]KeySaver, error) {
 	s := ref.Backend()
-	vals, err := ListRaw(s)
+	keys, err := s.Keys()
 	if err != nil {
 		return nil, err
 	}
-	res := make([]KeySaver, len(vals))
-	for i := range vals {
+	res := make([]KeySaver, len(keys))
+	for i, k := range keys {
 		v := ref.New()
-		err = s.Decode(vals[i], &v)
+		err = s.Load(k, &v)
 		if err != nil {
 			return nil, err
 		}
@@ -169,13 +159,7 @@ func save(s SimpleStore, k KeySaver) (bool, error) {
 			return false, err
 		}
 	}
-	var buf []byte
-	var err error
-	buf, err = s.Encode(k)
-	if err != nil {
-		return false, err
-	}
-	if err := s.Save(k.Key(), buf); err != nil {
+	if err := s.Save(k.Key(), k); err != nil {
 		return false, err
 	}
 	if h, ok := k.(AfterSaveHooker); ok {

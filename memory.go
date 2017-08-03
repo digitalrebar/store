@@ -32,35 +32,27 @@ func (m *SimpleMemoryStore) Keys() ([]string, error) {
 	return res, nil
 }
 
-func (m *SimpleMemoryStore) List() ([][]byte, error) {
-	m.RLock()
-	res := make([][]byte, 0, len(m.v))
-	for _, v := range m.v {
-		val := make([]byte, len(v))
-		copy(val, v)
-		res = append(res, val)
-	}
-	m.RUnlock()
-	return res, nil
-}
-
-func (m *SimpleMemoryStore) Load(key string) ([]byte, error) {
+func (m *SimpleMemoryStore) Load(key string, val interface{}) error {
 	m.RLock()
 	v, ok := m.v[key]
 	m.RUnlock()
 	if !ok {
-		return v, NotFound(key)
+		return NotFound(key)
 	}
-	return v, nil
+	return m.Decode(v, val)
 }
 
-func (m *SimpleMemoryStore) Save(key string, val []byte) error {
+func (m *SimpleMemoryStore) Save(key string, val interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	if m.ReadOnly() {
 		return UnWritable(key)
 	}
-	m.v[key] = val
+	buf, err := m.Encode(val)
+	if err != nil {
+		return err
+	}
+	m.v[key] = buf
 	return nil
 }
 

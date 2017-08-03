@@ -10,15 +10,16 @@ import (
 )
 
 type DirStore struct {
-	*Codec
+	Codec
+	ro
 	Path string
 }
 
 func (f *DirStore) name(n string) string {
-	return filepath.Join(f.Path, url.QueryEscape(n)) + f.Extension
+	return filepath.Join(f.Path, url.QueryEscape(n)) + f.Ext()
 }
 
-func NewDirBackend(path string, codec *Codec) (*DirStore, error) {
+func NewDirBackend(path string, codec Codec) (*DirStore, error) {
 	fullPath, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
 		return nil, err
@@ -50,10 +51,10 @@ func (f *DirStore) Keys() ([]string, error) {
 	}
 	res := make([]string, 0, len(names))
 	for _, name := range names {
-		if !strings.HasSuffix(name, f.Extension) {
+		if !strings.HasSuffix(name, f.Ext()) {
 			continue
 		}
-		n, err := url.QueryUnescape(strings.TrimSuffix(name, f.Extension))
+		n, err := url.QueryUnescape(strings.TrimSuffix(name, f.Ext()))
 		if err != nil {
 			return nil, err
 		}
@@ -71,6 +72,9 @@ func (f *DirStore) List() ([][]byte, error) {
 }
 
 func (f *DirStore) Save(key string, val []byte) error {
+	if f.ReadOnly() {
+		return UnWritable(key)
+	}
 	file, err := os.Create(f.name(key))
 	if err != nil {
 		return err
@@ -86,5 +90,8 @@ func (f *DirStore) Save(key string, val []byte) error {
 }
 
 func (f *DirStore) Remove(key string) error {
+	if f.ReadOnly() {
+		return UnWritable(key)
+	}
 	return os.Remove(f.name(key))
 }

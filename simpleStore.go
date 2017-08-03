@@ -23,6 +23,8 @@ type SimpleStore interface {
 	// Encode and decode objects to be saved.
 	Encode(interface{}) ([]byte, error)
 	Decode([]byte, interface{}) error
+	ReadOnly() bool
+	SetReadOnly() bool
 }
 
 func genericList(s SimpleStore) ([][]byte, error) {
@@ -46,4 +48,10 @@ type NotFound string
 
 func (n NotFound) Error() string {
 	return fmt.Sprintf("key %s: not found", string(n))
+}
+
+type UnWritable string
+
+func (u UnWritable) Error() string {
+	return fmt.Sprintf("readonly: %s", string(u))
 }

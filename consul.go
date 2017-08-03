@@ -8,12 +8,13 @@ import (
 )
 
 type SimpleConsulStore struct {
-	*Codec
+	Codec
+	ro
 	kv      *consul.KV
 	baseKey string
 }
 
-func NewSimpleConsulStore(c *consul.Client, prefix string, codec *Codec) (*SimpleConsulStore, error) {
+func NewSimpleConsulStore(c *consul.Client, prefix string, codec Codec) (*SimpleConsulStore, error) {
 	if codec == nil {
 		codec = DefaultCodec
 	}

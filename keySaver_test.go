@@ -100,9 +100,27 @@ var tests = []test{
 	test{op(Remove), "Remove Nonexistent Fail", &ntv, false, false, "BeforeDelete"},
 }
 
-// Expects a freshly-created store
-func testStore(t *testing.T) {
-	for _, s := range tests {
+var createTests = []test{
+	test{op(Create), "Create Hook Fail", &tv, false, true, "OnCreate"},
+	test{op(Create), "Create Succeed", &tv, true, false, "AfterSave"},
+	test{op(Create), "Create Duplicate Fail", &tv, false, false, ""},
+}
+
+var roTests = []test{
+	test{op(Load), "Load Hook Fail", &tv, true, true, "OnLoad"},
+	test{op(Load), "Load Nonexistent Fail", &ntv, false, false, ""},
+	test{op(Load), "Load Succeed", &tv, true, false, "OnLoad"},
+	test{op(Save), "Save Before Hook Fail", &tv, false, true, "BeforeSave"},
+	test{op(Save), "Save Succeed", &tv, false, false, "BeforeSave"},
+	test{op(Update), "Update Before Hook Fail", &tv, false, true, "OnChange"},
+	test{op(Update), "Update Succeed", &tv, false, false, "BeforeSave"},
+	test{op(Remove), "Remove Hook Fail", &tv, false, true, "BeforeDelete"},
+	test{op(Remove), "Remove Success", &tv, false, false, "BeforeDelete"},
+	test{op(Remove), "Remove Nonexistent Fail", &ntv, false, false, "BeforeDelete"},
+}
+
+func runTests(t *testing.T, toRun []test) {
+	for _, s := range toRun {
 		expectedTo := "fail"
 		if s.pass {
 			expectedTo = "pass"
@@ -142,6 +160,11 @@ func testStore(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Expects a freshly-created store
+func testStore(t *testing.T) {
+	runTests(t, tests)
 	// At the end, the store should be empty
 	ents, err := ListRaw(currentStore)
 	if err != nil {
@@ -165,6 +188,14 @@ func testStore(t *testing.T) {
 	} else if len(keys) != 1 {
 		t.Errorf("Expected 1 key, got %d", len(keys))
 	}
+	for _, k := range keys {
+		currentStore.Remove(k)
+	}
+	runTests(t, createTests)
+	if !currentStore.SetReadOnly() {
+		t.Errorf("Unable to set store to read only")
+	}
+	runTests(t, roTests)
 }
 
 func TestMemoryStore(t *testing.T) {

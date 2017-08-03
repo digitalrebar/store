@@ -8,7 +8,8 @@ import (
 )
 
 type SimpleLocalStore struct {
-	*Codec
+	Codec
+	ro
 	db     *bolt.DB
 	bucket []byte
 }
@@ -30,7 +31,7 @@ func (b *SimpleLocalStore) init(loc string) error {
 		return err
 	})
 }
-func NewSimpleLocalStore(location string, codec *Codec) (*SimpleLocalStore, error) {
+func NewSimpleLocalStore(location string, codec Codec) (*SimpleLocalStore, error) {
 	res := &SimpleLocalStore{Codec: codec, bucket: []byte(`Default`)}
 	return res, res.init(location)
 }
@@ -79,6 +80,9 @@ func (b *SimpleLocalStore) Load(key string) ([]byte, error) {
 }
 
 func (b *SimpleLocalStore) Save(key string, val []byte) error {
+	if b.ReadOnly() {
+		return UnWritable(key)
+	}
 	return b.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(b.bucket)
 		return bucket.Put([]byte(key), val)
@@ -86,6 +90,9 @@ func (b *SimpleLocalStore) Save(key string, val []byte) error {
 }
 
 func (b *SimpleLocalStore) Remove(key string) error {
+	if b.ReadOnly() {
+		return UnWritable(key)
+	}
 	return b.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(b.bucket)
 		if res := bucket.Get([]byte(key)); res == nil {

@@ -5,12 +5,13 @@ import "sync"
 // MemoryStore provides an in-memory implementation of SimpleStore
 // for testing purposes
 type SimpleMemoryStore struct {
-	*Codec
+	Codec
+	ro
 	sync.RWMutex
 	v map[string][]byte
 }
 
-func NewSimpleMemoryStore(codec *Codec) *SimpleMemoryStore {
+func NewSimpleMemoryStore(codec Codec) *SimpleMemoryStore {
 	if codec == nil {
 		codec = DefaultCodec
 	}
@@ -55,19 +56,24 @@ func (m *SimpleMemoryStore) Load(key string) ([]byte, error) {
 
 func (m *SimpleMemoryStore) Save(key string, val []byte) error {
 	m.Lock()
+	defer m.Unlock()
+	if m.ReadOnly() {
+		return UnWritable(key)
+	}
 	m.v[key] = val
-	m.Unlock()
 	return nil
 }
 
 func (m *SimpleMemoryStore) Remove(key string) error {
 	m.Lock()
+	defer m.Unlock()
 	_, ok := m.v[key]
 	if ok {
+		if m.ReadOnly() {
+			return UnWritable(key)
+		}
 		delete(m.v, key)
-		m.Unlock()
 		return nil
 	}
-	m.Unlock()
 	return NotFound(key)
 }

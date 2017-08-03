@@ -6,30 +6,40 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-type Codec struct {
-	enc       func(interface{}) ([]byte, error)
-	dec       func([]byte, interface{}) error
-	Extension string
+type codec struct {
+	enc func(interface{}) ([]byte, error)
+	dec func([]byte, interface{}) error
+	ext string
 }
 
-func (c *Codec) Encode(i interface{}) ([]byte, error) {
+func (c *codec) Encode(i interface{}) ([]byte, error) {
 	return c.enc(i)
 }
 
-func (c *Codec) Decode(buf []byte, i interface{}) error {
+func (c *codec) Decode(buf []byte, i interface{}) error {
 	return c.dec(buf, i)
 }
 
-var JsonCodec = &Codec{
-	enc:       json.Marshal,
-	dec:       json.Unmarshal,
-	Extension: ".json",
+func (c *codec) Ext() string {
+	return c.ext
 }
 
-var YamlCodec = &Codec{
-	enc:       yaml.Marshal,
-	dec:       yaml.Unmarshal,
-	Extension: ".yaml",
+type Codec interface {
+	Encode(interface{}) ([]byte, error)
+	Decode([]byte, interface{}) error
+	Ext() string
+}
+
+var JsonCodec = &codec{
+	enc: json.Marshal,
+	dec: json.Unmarshal,
+	ext: ".json",
+}
+
+var YamlCodec = &codec{
+	enc: yaml.Marshal,
+	dec: yaml.Unmarshal,
+	ext: ".yaml",
 }
 
 var DefaultCodec = JsonCodec

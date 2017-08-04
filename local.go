@@ -8,8 +8,7 @@ import (
 )
 
 type SimpleLocalStore struct {
-	Codec
-	ro
+	storeBase
 	db     *bolt.DB
 	bucket []byte
 }
@@ -32,12 +31,15 @@ func (b *SimpleLocalStore) init(loc string) error {
 	})
 }
 func NewSimpleLocalStore(location string, codec Codec) (*SimpleLocalStore, error) {
-	res := &SimpleLocalStore{Codec: codec, bucket: []byte(`Default`)}
+	res := &SimpleLocalStore{bucket: []byte(`Default`)}
+	res.Codec = codec
 	return res, res.init(location)
 }
 
-func (b *SimpleLocalStore) Sub(loc string) (SimpleStore, error) {
-	res := &SimpleLocalStore{Codec: b.Codec, db: b.db, bucket: []byte(loc)}
+func (b *SimpleLocalStore) MakeSub(loc string) (SimpleStore, error) {
+	res := &SimpleLocalStore{db: b.db, bucket: []byte(loc)}
+	res.Codec = b.Codec
+	addSub(b, res, loc)
 	return res, res.init("")
 }
 

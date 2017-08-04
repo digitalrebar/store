@@ -8,8 +8,7 @@ import (
 )
 
 type SimpleConsulStore struct {
-	Codec
-	ro
+	storeBase
 	kv      *consul.KV
 	baseKey string
 }
@@ -18,11 +17,16 @@ func NewSimpleConsulStore(c *consul.Client, prefix string, codec Codec) (*Simple
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	return &SimpleConsulStore{Codec: codec, kv: c.KV(), baseKey: prefix}, nil
+	res := &SimpleConsulStore{kv: c.KV(), baseKey: prefix}
+	res.Codec = codec
+	return res, nil
 }
 
-func (b *SimpleConsulStore) Sub(prefix string) (SimpleStore, error) {
-	return &SimpleConsulStore{Codec: b.Codec, kv: b.kv, baseKey: path.Join(b.baseKey, prefix)}, nil
+func (b *SimpleConsulStore) MakeSub(prefix string) (SimpleStore, error) {
+	res := &SimpleConsulStore{kv: b.kv, baseKey: path.Join(b.baseKey, prefix)}
+	res.Codec = b.Codec
+	addSub(b, res, prefix)
+	return res, nil
 }
 
 func (b *SimpleConsulStore) finalKey(k string) string {

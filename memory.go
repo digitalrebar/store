@@ -1,13 +1,9 @@
 package store
 
-import "sync"
-
 // MemoryStore provides an in-memory implementation of SimpleStore
 // for testing purposes
 type SimpleMemoryStore struct {
-	Codec
-	ro
-	sync.RWMutex
+	storeBase
 	v map[string][]byte
 }
 
@@ -15,11 +11,15 @@ func NewSimpleMemoryStore(codec Codec) *SimpleMemoryStore {
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	return &SimpleMemoryStore{Codec: codec, v: make(map[string][]byte)}
+	res := &SimpleMemoryStore{v: make(map[string][]byte)}
+	res.Codec = codec
+	return res
 }
 
-func (m *SimpleMemoryStore) Sub(loc string) (SimpleStore, error) {
-	return NewSimpleMemoryStore(m.Codec), nil
+func (m *SimpleMemoryStore) MakeSub(loc string) (SimpleStore, error) {
+	res := NewSimpleMemoryStore(m.Codec)
+	addSub(m, res, loc)
+	return res, nil
 }
 
 func (m *SimpleMemoryStore) Keys() ([]string, error) {

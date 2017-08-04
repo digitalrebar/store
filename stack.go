@@ -1,46 +1,54 @@
 package store
 
-import (
-	"fmt"
-	"sync"
-)
+import "fmt"
 
 type StackedStore struct {
-	sync.RWMutex
+	storeBase
 	stores []SimpleStore
 	top    SimpleStore
 	keys   map[string]int
 }
 
-func (s *StackedStore) Push(stores ...SimpleStore) error {
-	s.Lock()
-	var scanIdx int
-	if s.stores == nil {
-		s.stores = stores
-	} else {
-		scanIdx = len(s.stores)
-		s.stores = append(s.stores, stores...)
+func NewStackedStore(stores ...SimpleStore) (*StackedStore, error) {
+	if stores == nil || len(stores) == 0 {
+		return nil, fmt.Errorf("Stacked store must include a list of stores to stack")
 	}
-	s.top = s.stores[len(s.stores)-1]
-	if len(s.stores) > 1 {
-		for i := len(s.stores) - 2; i >= 0; i-- {
-			s.stores[i].SetReadOnly()
+	res := &StackedStore{}
+	res.stores = stores
+	res.top = stores[len(stores)-1]
+	if len(stores) > 1 {
+		for i := len(stores) - 2; i >= 0; i-- {
+			stores[i].SetReadOnly()
 		}
 	}
-	for i := scanIdx; i < len(s.stores); i++ {
-		newKeys, err := s.stores[i].Keys()
+	subStacks := map[string][]SimpleStore{}
+	for i, item := range stores {
+		newKeys, err := item.Keys()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, k := range newKeys {
-			s.keys[k] = i
+			res.keys[k] = i
+		}
+		for k, v := range item.Subs() {
+			if _, ok := subStacks[k]; !ok {
+				subStacks[k] = []SimpleStore{v}
+			} else {
+				subStacks[k] = append(subStacks[k], v)
+			}
 		}
 	}
-	s.Unlock()
-	return nil
+	for k, v := range subStacks {
+		sub, err := NewStackedStore(v...)
+		if err != nil {
+			return nil, err
+		}
+		addSub(res, sub, k)
+	}
+	return res, nil
 }
 
-func (s *StackedStore) Sub(st string) (SimpleStore, error) {
+func (s *StackedStore) MakeSub(st string) (SimpleStore, error) {
 	return nil, fmt.Errorf("Cannot create substore %s on a stacked store", st)
 }
 
@@ -85,14 +93,6 @@ func (s *StackedStore) Remove(key string) error {
 		return UnWritable(key)
 	}
 	return s.top.Remove(key)
-}
-
-func (s *StackedStore) Encode(i interface{}) ([]byte, error) {
-	return nil, fmt.Errorf("Do not call Encode() on a stacked store directly")
-}
-
-func (s *StackedStore) Decode(buf []byte, i interface{}) error {
-	return fmt.Errorf("Do not call Decode() on a stacked store directly")
 }
 
 func (s *StackedStore) ReadOnly() bool {

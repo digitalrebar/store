@@ -24,9 +24,15 @@ func (c *codec) Ext() string {
 	return c.ext
 }
 
+// Codec is responsible for encoding and decoding raw Go objects into
+// a serializable form.
 type Codec interface {
+	// Encode takes an object and turns it into a byte array.
 	Encode(interface{}) ([]byte, error)
+	// Decode takes a byte array and decodes it into an object
 	Decode([]byte, interface{}) error
+	// Ext is the file extension that should be used for this encoding
+	// if we are encoding to a filesystem.
 	Ext() string
 }
 

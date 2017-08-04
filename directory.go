@@ -10,8 +10,7 @@ import (
 )
 
 type DirStore struct {
-	Codec
-	ro
+	storeBase
 	Path string
 }
 
@@ -30,14 +29,18 @@ func NewDirBackend(path string, codec Codec) (*DirStore, error) {
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	return &DirStore{
-		Path:  path,
-		Codec: codec,
-	}, nil
+	res := &DirStore{Path: path}
+	res.Codec = codec
+	return res, nil
 }
 
-func (f *DirStore) Sub(path string) (SimpleStore, error) {
-	return NewDirBackend(filepath.Join(f.Path, path), f.Codec)
+func (f *DirStore) MakeSub(path string) (SimpleStore, error) {
+	child, err := NewDirBackend(filepath.Join(f.Path, path), f.Codec)
+	if err != nil {
+		return nil, err
+	}
+	addSub(f, child, path)
+	return child, nil
 }
 
 func (f *DirStore) Keys() ([]string, error) {

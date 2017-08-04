@@ -31,10 +31,31 @@ func NewDirBackend(path string, codec Codec) (*DirStore, error) {
 	}
 	res := &DirStore{Path: path}
 	res.Codec = codec
+	d, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := d.Readdir(0)
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range infos {
+		if info.IsDir() && info.Name() != "." && info.Name() != ".." {
+			if _, err := res.MakeSub(info.Name()); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return res, nil
 }
 
 func (f *DirStore) MakeSub(path string) (SimpleStore, error) {
+	f.Lock()
+	defer f.Unlock()
+	f.panicIfClosed()
+	if child, ok := f.subStores[path]; ok {
+		return child, nil
+	}
 	child, err := NewDirBackend(filepath.Join(f.Path, path), f.Codec)
 	if err != nil {
 		return nil, err
@@ -44,16 +65,21 @@ func (f *DirStore) MakeSub(path string) (SimpleStore, error) {
 }
 
 func (f *DirStore) Keys() ([]string, error) {
+	f.panicIfClosed()
 	d, err := os.Open(f.Path)
 	if err != nil {
 		return nil, err
 	}
-	names, err := d.Readdirnames(0)
+	infos, err := d.Readdir(0)
 	if err != nil {
 		return nil, fmt.Errorf("dir keys: readdir error %#v", err)
 	}
-	res := make([]string, 0, len(names))
-	for _, name := range names {
+	res := []string{}
+	for _, info := range infos {
+		if info.IsDir() {
+			continue
+		}
+		name := info.Name()
 		if !strings.HasSuffix(name, f.Ext()) {
 			continue
 		}
@@ -63,10 +89,11 @@ func (f *DirStore) Keys() ([]string, error) {
 		}
 		res = append(res, n)
 	}
-	return res[:], nil
+	return res, nil
 }
 
 func (f *DirStore) Load(key string, val interface{}) error {
+	f.panicIfClosed()
 	buf, err := ioutil.ReadFile(f.name(key))
 	if err != nil {
 		return err
@@ -75,6 +102,7 @@ func (f *DirStore) Load(key string, val interface{}) error {
 }
 
 func (f *DirStore) Save(key string, val interface{}) error {
+	f.panicIfClosed()
 	if f.ReadOnly() {
 		return UnWritable(key)
 	}
@@ -97,6 +125,7 @@ func (f *DirStore) Save(key string, val interface{}) error {
 }
 
 func (f *DirStore) Remove(key string) error {
+	f.panicIfClosed()
 	if f.ReadOnly() {
 		return UnWritable(key)
 	}

@@ -32,6 +32,8 @@ type SimpleStore interface {
 	// Control the writeability of the store
 	ReadOnly() bool
 	SetReadOnly() bool
+	// Stop the store from further operations.
+	Close()
 }
 
 type parentSetter interface {
@@ -40,6 +42,10 @@ type parentSetter interface {
 
 type childSetter interface {
 	addChild(string, SimpleStore)
+}
+
+type forceCloser interface {
+	forceClose()
 }
 
 // NotFound is the "key not found" error type.
@@ -59,20 +65,58 @@ type storeBase struct {
 	sync.RWMutex
 	Codec
 	readOnly    bool
+	closed      bool
 	storeType   string
 	subStores   map[string]SimpleStore
 	parentStore SimpleStore
+	closer      func()
+}
+
+func (s *storeBase) forceClose() {
+	s.Lock()
+	defer s.Unlock()
+	if s.closed {
+		return
+	}
+	if s.closer != nil {
+		s.closer()
+	}
+	s.closed = true
+}
+
+func (s *storeBase) Close() {
+	s.Lock()
+	if s.parentStore == nil {
+		s.Unlock()
+		s.forceClose()
+		for _, sub := range s.subStores {
+			sub.(forceCloser).forceClose()
+		}
+		return
+	}
+	parent := s.parentStore
+	s.Unlock()
+	parent.Close()
+	return
+}
+
+func (s *storeBase) panicIfClosed() {
+	if s.closed {
+		panic("Operation on closed store")
+	}
 }
 
 func (s *storeBase) ReadOnly() bool {
 	s.RLock()
 	defer s.RUnlock()
+	s.panicIfClosed()
 	return s.readOnly
 }
 
 func (s *storeBase) SetReadOnly() bool {
 	s.Lock()
 	defer s.Unlock()
+	s.panicIfClosed()
 	if s.readOnly {
 		return false
 	}
@@ -86,6 +130,7 @@ func (s *storeBase) SetReadOnly() bool {
 func (s *storeBase) GetSub(name string) SimpleStore {
 	s.RLock()
 	defer s.RUnlock()
+	s.panicIfClosed()
 	if s.subStores == nil {
 		return nil
 	}
@@ -95,6 +140,7 @@ func (s *storeBase) GetSub(name string) SimpleStore {
 func (s *storeBase) Subs() map[string]SimpleStore {
 	s.RLock()
 	defer s.RUnlock()
+	s.panicIfClosed()
 	res := map[string]SimpleStore{}
 	for k, v := range s.subStores {
 		res[k] = v
@@ -105,18 +151,15 @@ func (s *storeBase) Subs() map[string]SimpleStore {
 func (s *storeBase) Parent() SimpleStore {
 	s.RLock()
 	defer s.RUnlock()
+	s.panicIfClosed()
 	return s.parentStore.(SimpleStore)
 }
 
 func (s *storeBase) setParent(p SimpleStore) {
-	s.Lock()
-	defer s.Unlock()
 	s.parentStore = p
 }
 
 func (s *storeBase) addChild(name string, c SimpleStore) {
-	s.Lock()
-	defer s.Unlock()
 	if s.subStores == nil {
 		s.subStores = map[string]SimpleStore{}
 	}

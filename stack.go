@@ -43,7 +43,13 @@ func NewStackedStore(stores ...SimpleStore) (*StackedStore, error) {
 		if err != nil {
 			return nil, err
 		}
+		sub.closer = nil
 		addSub(res, sub, k)
+	}
+	res.closer = func() {
+		for _, item := range stores {
+			item.Close()
+		}
 	}
 	return res, nil
 }

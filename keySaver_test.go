@@ -163,7 +163,7 @@ func runTests(t *testing.T, toRun []test) {
 }
 
 // Expects a freshly-created store
-func testStore(t *testing.T) {
+func testOneStore(t *testing.T) {
 	runTests(t, tests)
 	// At the end, the store should be empty
 	ents, err := currentStore.Keys()
@@ -198,6 +198,28 @@ func testStore(t *testing.T) {
 	runTests(t, roTests)
 }
 
+func testStore(t *testing.T) {
+	t.Logf("Testing top-level store")
+	testOneStore(t)
+	var err error
+	_, err = currentStore.MakeSub("sub1")
+	if err != nil {
+		t.Errorf("Error creating substore sub1")
+		return
+	}
+	t.Logf("Testing substore sub1")
+	currentStore = currentStore.GetSub("sub1")
+	testOneStore(t)
+	_, err = currentStore.MakeSub("sub2")
+	if err != nil {
+		t.Errorf("Error creating substore sub2")
+		return
+	}
+	t.Logf("Testing substore sub2")
+	currentStore = currentStore.GetSub("sub2")
+	testOneStore(t)
+}
+
 func TestMemoryStore(t *testing.T) {
 	currentStore = NewSimpleMemoryStore(nil)
 	t.Log("Testing simple memory store")
@@ -206,11 +228,13 @@ func TestMemoryStore(t *testing.T) {
 }
 
 func TestLocalStore(t *testing.T) {
+	t.Logf("Creating tmpdir for LocalStore testing")
 	tmpDir, err := ioutil.TempDir("", "localstore-")
 	if err != nil {
 		t.Errorf("Failed to create tmp dir for LocalStore testing")
 		return
 	}
+	t.Logf("Running in %s", tmpDir)
 	defer os.RemoveAll(tmpDir)
 	currentStore, err = NewSimpleLocalStore(tmpDir, YamlCodec)
 	if err != nil {
@@ -219,15 +243,34 @@ func TestLocalStore(t *testing.T) {
 	}
 	t.Log("Testing local store")
 	testStore(t)
-	t.Log("Local store test finished")
-}
-
-func TestFileStore(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "filestore-")
+	t.Log("Testing persistence of local substore hierarchy")
+	currentStore.Close()
+	currentStore, err = NewSimpleLocalStore(tmpDir, YamlCodec)
 	if err != nil {
-		t.Errorf("Failed to create tmp dir for FileStore testing")
+		t.Errorf("Failed to reload local store: %v", err)
 		return
 	}
+	sub1 := currentStore.GetSub("sub1")
+	if sub1 == nil {
+		t.Errorf("Did not load expected substore sub1")
+		return
+	}
+	sub2 := sub1.GetSub("sub2")
+	if sub2 == nil {
+		t.Errorf("Did not load expected substore sub2")
+		return
+	}
+	t.Logf("Local store test finished")
+}
+
+func TestDirStore(t *testing.T) {
+	t.Logf("Creating tmpdir for LocalStore testing")
+	tmpDir, err := ioutil.TempDir("", "filestore-")
+	if err != nil {
+		t.Errorf("Failed to create tmp dir for DirStore testing")
+		return
+	}
+	t.Logf("Running in %s", tmpDir)
 	defer os.RemoveAll(tmpDir)
 	currentStore, err = NewDirBackend(tmpDir, JsonCodec)
 	if err != nil {
@@ -236,5 +279,22 @@ func TestFileStore(t *testing.T) {
 	}
 	t.Log("Testing file store")
 	testStore(t)
+	t.Log("Testing persistence of dir substore hierarchy")
+	currentStore.Close()
+	currentStore, err = NewDirBackend(tmpDir, JsonCodec)
+	if err != nil {
+		t.Errorf("Failed to reload dir store: %v", err)
+		return
+	}
+	sub1 := currentStore.GetSub("sub1")
+	if sub1 == nil {
+		t.Errorf("Did not load expected substore sub1")
+		return
+	}
+	sub2 := sub1.GetSub("sub2")
+	if sub2 == nil {
+		t.Errorf("Did not load expected substore sub2")
+		return
+	}
 	t.Log("File store test finished")
 }

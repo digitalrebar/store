@@ -13,10 +13,16 @@ func NewSimpleMemoryStore(codec Codec) *SimpleMemoryStore {
 	}
 	res := &SimpleMemoryStore{v: make(map[string][]byte)}
 	res.Codec = codec
+	res.closer = func() {
+		res.v = nil
+	}
 	return res
 }
 
 func (m *SimpleMemoryStore) MakeSub(loc string) (SimpleStore, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.panicIfClosed()
 	res := NewSimpleMemoryStore(m.Codec)
 	addSub(m, res, loc)
 	return res, nil
@@ -24,6 +30,7 @@ func (m *SimpleMemoryStore) MakeSub(loc string) (SimpleStore, error) {
 
 func (m *SimpleMemoryStore) Keys() ([]string, error) {
 	m.RLock()
+	m.panicIfClosed()
 	res := make([]string, 0, len(m.v))
 	for k := range m.v {
 		res = append(res, k)
@@ -34,6 +41,7 @@ func (m *SimpleMemoryStore) Keys() ([]string, error) {
 
 func (m *SimpleMemoryStore) Load(key string, val interface{}) error {
 	m.RLock()
+	m.panicIfClosed()
 	v, ok := m.v[key]
 	m.RUnlock()
 	if !ok {
@@ -45,7 +53,8 @@ func (m *SimpleMemoryStore) Load(key string, val interface{}) error {
 func (m *SimpleMemoryStore) Save(key string, val interface{}) error {
 	m.Lock()
 	defer m.Unlock()
-	if m.ReadOnly() {
+	m.panicIfClosed()
+	if m.readOnly {
 		return UnWritable(key)
 	}
 	buf, err := m.Encode(val)
@@ -59,9 +68,10 @@ func (m *SimpleMemoryStore) Save(key string, val interface{}) error {
 func (m *SimpleMemoryStore) Remove(key string) error {
 	m.Lock()
 	defer m.Unlock()
+	m.panicIfClosed()
 	_, ok := m.v[key]
 	if ok {
-		if m.ReadOnly() {
+		if m.readOnly {
 			return UnWritable(key)
 		}
 		delete(m.v, key)

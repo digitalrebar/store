@@ -1,6 +1,8 @@
 package store
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -13,42 +15,122 @@ type SimpleLocalStore struct {
 	bucket []byte
 }
 
-func (b *SimpleLocalStore) init(loc string) error {
-	if b.db == nil {
-		finalLoc := filepath.Clean(loc)
-		if err := os.MkdirAll(finalLoc, 0755); err != nil {
-			return err
+func (b *SimpleLocalStore) getBucket(tx *bolt.Tx) (res *bolt.Bucket) {
+	for _, part := range bytes.Split(b.bucket, []byte("/")) {
+		if res == nil {
+			res = tx.Bucket(part)
+		} else {
+			res = res.Bucket(part)
 		}
-		db, err := bolt.Open(filepath.Join(finalLoc, "bolt.db"), 0600, nil)
-		if err != nil {
-			return err
+		if res == nil {
+			panic(fmt.Sprintf("Bucket %s does not exist", string(b.bucket)))
 		}
-		b.db = db
 	}
-	return b.db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(b.bucket)
-		return err
-	})
+	return
 }
+
+func (l *SimpleLocalStore) loadSubs() error {
+	err := l.db.Update(func(tx *bolt.Tx) error {
+		var bukkit *bolt.Bucket
+		var err error
+		for _, part := range bytes.Split(l.bucket, []byte("/")) {
+			if bukkit == nil {
+				bukkit, err = tx.CreateBucketIfNotExists(part)
+			} else {
+				bukkit, err = bukkit.CreateBucketIfNotExists(part)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	subs := [][]byte{}
+	err = l.db.View(func(tx *bolt.Tx) error {
+		bucket := l.getBucket(tx)
+		bucket.ForEach(func(k, v []byte) error {
+			if v == nil {
+				subs = append(subs, k)
+			}
+			return nil
+		})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, sub := range subs {
+		if _, err := l.MakeSub(string(sub)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func NewSimpleLocalStore(location string, codec Codec) (*SimpleLocalStore, error) {
 	res := &SimpleLocalStore{bucket: []byte(`Default`)}
 	res.Codec = codec
-	return res, res.init(location)
+	finalLoc := filepath.Clean(location)
+	if err := os.MkdirAll(finalLoc, 0755); err != nil {
+		return nil, err
+	}
+	db, err := bolt.Open(filepath.Join(finalLoc, "bolt.db"), 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+	res.db = db
+	err = res.db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(res.bucket)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := res.loadSubs(); err != nil {
+		return nil, err
+	}
+
+	res.closer = func() {
+		res.db.Close()
+		res.db = nil
+	}
+	return res, nil
 }
 
 func (b *SimpleLocalStore) MakeSub(loc string) (SimpleStore, error) {
-	res := &SimpleLocalStore{db: b.db, bucket: []byte(loc)}
+	b.Lock()
+	defer b.Unlock()
+	b.panicIfClosed()
+	if res, ok := b.subStores[loc]; ok {
+		return res, nil
+	}
+	res := &SimpleLocalStore{db: b.db, bucket: bytes.Join([][]byte{b.bucket, []byte(loc)}, []byte("/"))}
 	res.Codec = b.Codec
+	if err := res.loadSubs(); err != nil {
+		return nil, err
+	}
+
+	res.closer = func() {
+		res.db = nil
+	}
 	addSub(b, res, loc)
-	return res, res.init("")
+	return res, nil
 }
 
 func (b *SimpleLocalStore) Keys() ([]string, error) {
+	b.panicIfClosed()
 	res := []string{}
 	err := b.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(b.bucket)
+		bucket := b.getBucket(tx)
 		bucket.ForEach(func(k, v []byte) error {
-			res = append(res, string(k))
+			if v != nil {
+				res = append(res, string(k))
+			}
 			return nil
 		})
 		return nil
@@ -57,9 +139,10 @@ func (b *SimpleLocalStore) Keys() ([]string, error) {
 }
 
 func (b *SimpleLocalStore) Load(key string, val interface{}) error {
+	b.panicIfClosed()
 	var res []byte
 	err := b.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(b.bucket)
+		bucket := b.getBucket(tx)
 		res = bucket.Get([]byte(key))
 		if res == nil {
 			return NotFound(key)
@@ -73,6 +156,7 @@ func (b *SimpleLocalStore) Load(key string, val interface{}) error {
 }
 
 func (b *SimpleLocalStore) Save(key string, val interface{}) error {
+	b.panicIfClosed()
 	if b.ReadOnly() {
 		return UnWritable(key)
 	}
@@ -81,17 +165,18 @@ func (b *SimpleLocalStore) Save(key string, val interface{}) error {
 		return err
 	}
 	return b.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(b.bucket)
+		bucket := b.getBucket(tx)
 		return bucket.Put([]byte(key), buf)
 	})
 }
 
 func (b *SimpleLocalStore) Remove(key string) error {
+	b.panicIfClosed()
 	if b.ReadOnly() {
 		return UnWritable(key)
 	}
 	return b.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(b.bucket)
+		bucket := b.getBucket(tx)
 		if res := bucket.Get([]byte(key)); res == nil {
 			return NotFound(key)
 		}

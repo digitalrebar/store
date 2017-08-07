@@ -36,12 +36,14 @@ type Codec interface {
 	Ext() string
 }
 
+// JsonCodec implements Codec for encoding/decoding to JSON.
 var JsonCodec = &codec{
 	enc: json.Marshal,
 	dec: json.Unmarshal,
 	ext: ".json",
 }
 
+// YamlCodec implements a Codec for encoding/decoding to YAML
 var YamlCodec = &codec{
 	enc: yaml.Marshal,
 	dec: yaml.Unmarshal,

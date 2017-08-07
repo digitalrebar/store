@@ -7,46 +7,48 @@ import (
 	consul "github.com/hashicorp/consul/api"
 )
 
-type SimpleConsulStore struct {
+// Consul implements a Store that is backed by the Consul key/value store.
+type Consul struct {
 	storeBase
-	client *consul.Client
+	Client *consul.Client
 
-	baseKey string
+	BaseKey string
 }
 
-func NewSimpleConsulStore(c *consul.Client, prefix string, codec Codec) (*SimpleConsulStore, error) {
+func (c *Consul) Open(codec Codec) error {
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	res := &SimpleConsulStore{client: c, baseKey: prefix}
-	res.Codec = codec
-	keys, _, err := res.client.KV().Keys(res.baseKey, "", nil)
+	c.Codec = codec
+	keys, _, err := c.Client.KV().Keys(c.BaseKey, "", nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	c.opened = true
 	for i := range keys {
 		if !strings.HasSuffix(keys[i], "/") {
 			continue
 		}
-		subKey := strings.TrimSuffix(strings.TrimPrefix(keys[i], res.baseKey+"/"), "/")
-		if _, err := res.MakeSub(subKey); err != nil {
-			return nil, err
+		subKey := strings.TrimSuffix(strings.TrimPrefix(keys[i], c.BaseKey+"/"), "/")
+		if _, err := c.MakeSub(subKey); err != nil {
+			return err
 		}
 	}
-	res.closer = func() {
-		res.client = nil
+	c.closer = func() {
+		c.Client = nil
 	}
-	return res, nil
+	return nil
 }
 
-func (b *SimpleConsulStore) MakeSub(prefix string) (SimpleStore, error) {
+func (b *Consul) MakeSub(prefix string) (Store, error) {
 	b.Lock()
 	defer b.Unlock()
 	b.panicIfClosed()
 	if res, ok := b.subStores[prefix]; ok {
 		return res, nil
 	}
-	res, err := NewSimpleConsulStore(b.client, path.Join(b.baseKey, prefix), b.Codec)
+	res := &Consul{Client: b.Client, BaseKey: b.BaseKey}
+	err := res.Open(b.Codec)
 	if err != nil {
 		return nil, err
 	}
@@ -54,13 +56,13 @@ func (b *SimpleConsulStore) MakeSub(prefix string) (SimpleStore, error) {
 	return res, nil
 }
 
-func (b *SimpleConsulStore) finalKey(k string) string {
-	return path.Clean(path.Join(b.baseKey, k))
+func (b *Consul) finalKey(k string) string {
+	return path.Clean(path.Join(b.BaseKey, k))
 }
 
-func (b *SimpleConsulStore) Keys() ([]string, error) {
+func (b *Consul) Keys() ([]string, error) {
 	b.panicIfClosed()
-	keys, _, err := b.client.KV().Keys(b.baseKey, "", nil)
+	keys, _, err := b.Client.KV().Keys(b.BaseKey, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +71,14 @@ func (b *SimpleConsulStore) Keys() ([]string, error) {
 		if strings.HasSuffix(keys[i], "/") {
 			continue
 		}
-		res = append(res, strings.TrimPrefix(keys[i], b.baseKey+"/"))
+		res = append(res, strings.TrimPrefix(keys[i], b.BaseKey+"/"))
 	}
 	return res, nil
 }
 
-func (b *SimpleConsulStore) Load(key string, val interface{}) error {
+func (b *Consul) Load(key string, val interface{}) error {
 	b.panicIfClosed()
-	buf, _, err := b.client.KV().Get(b.finalKey(key), nil)
+	buf, _, err := b.Client.KV().Get(b.finalKey(key), nil)
 	if buf == nil {
 		return NotFound(key)
 	}
@@ -86,7 +88,7 @@ func (b *SimpleConsulStore) Load(key string, val interface{}) error {
 	return b.Decode(buf.Value, val)
 }
 
-func (b *SimpleConsulStore) Save(key string, val interface{}) error {
+func (b *Consul) Save(key string, val interface{}) error {
 	b.panicIfClosed()
 	if b.ReadOnly() {
 		return UnWritable(key)
@@ -96,15 +98,15 @@ func (b *SimpleConsulStore) Save(key string, val interface{}) error {
 		return err
 	}
 	kp := &consul.KVPair{Value: buf, Key: b.finalKey(key)}
-	_, err = b.client.KV().Put(kp, nil)
+	_, err = b.Client.KV().Put(kp, nil)
 	return err
 }
 
-func (b *SimpleConsulStore) Remove(key string) error {
+func (b *Consul) Remove(key string) error {
 	b.panicIfClosed()
 	if b.ReadOnly() {
 		return UnWritable(key)
 	}
-	_, err := b.client.KV().Delete(b.finalKey(key), nil)
+	_, err := b.Client.KV().Delete(b.finalKey(key), nil)
 	return err
 }

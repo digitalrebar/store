@@ -9,54 +9,56 @@ import (
 	"strings"
 )
 
-type DirStore struct {
+// Directory implements a Store that is backed by a local directory tree.
+type Directory struct {
 	storeBase
 	Path string
 }
 
-func (f *DirStore) name(n string) string {
+func (f *Directory) name(n string) string {
 	return filepath.Join(f.Path, url.QueryEscape(n)) + f.Ext()
 }
 
-func NewDirBackend(path string, codec Codec) (*DirStore, error) {
-	fullPath, err := filepath.Abs(filepath.Clean(path))
+func (f *Directory) Open(codec Codec) error {
+	fullPath, err := filepath.Abs(filepath.Clean(f.Path))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
-		return nil, err
+		return err
 	}
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	res := &DirStore{Path: path}
-	res.Codec = codec
+	f.Codec = codec
 	d, err := os.Open(fullPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	infos, err := d.Readdir(0)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	f.opened = true
 	for _, info := range infos {
 		if info.IsDir() && info.Name() != "." && info.Name() != ".." {
-			if _, err := res.MakeSub(info.Name()); err != nil {
-				return nil, err
+			if _, err := f.MakeSub(info.Name()); err != nil {
+				return err
 			}
 		}
 	}
-	return res, nil
+	return nil
 }
 
-func (f *DirStore) MakeSub(path string) (SimpleStore, error) {
+func (f *Directory) MakeSub(path string) (Store, error) {
 	f.Lock()
 	defer f.Unlock()
 	f.panicIfClosed()
 	if child, ok := f.subStores[path]; ok {
 		return child, nil
 	}
-	child, err := NewDirBackend(filepath.Join(f.Path, path), f.Codec)
+	child := &Directory{Path: filepath.Join(f.Path, path)}
+	err := child.Open(f.Codec)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func (f *DirStore) MakeSub(path string) (SimpleStore, error) {
 	return child, nil
 }
 
-func (f *DirStore) Keys() ([]string, error) {
+func (f *Directory) Keys() ([]string, error) {
 	f.panicIfClosed()
 	d, err := os.Open(f.Path)
 	if err != nil {
@@ -92,7 +94,7 @@ func (f *DirStore) Keys() ([]string, error) {
 	return res, nil
 }
 
-func (f *DirStore) Load(key string, val interface{}) error {
+func (f *Directory) Load(key string, val interface{}) error {
 	f.panicIfClosed()
 	buf, err := ioutil.ReadFile(f.name(key))
 	if err != nil {
@@ -101,7 +103,7 @@ func (f *DirStore) Load(key string, val interface{}) error {
 	return f.Decode(buf, val)
 }
 
-func (f *DirStore) Save(key string, val interface{}) error {
+func (f *Directory) Save(key string, val interface{}) error {
 	f.panicIfClosed()
 	if f.ReadOnly() {
 		return UnWritable(key)
@@ -124,7 +126,7 @@ func (f *DirStore) Save(key string, val interface{}) error {
 	return nil
 }
 
-func (f *DirStore) Remove(key string) error {
+func (f *Directory) Remove(key string) error {
 	f.panicIfClosed()
 	if f.ReadOnly() {
 		return UnWritable(key)

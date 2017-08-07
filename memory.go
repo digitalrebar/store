@@ -1,34 +1,36 @@
 package store
 
-// MemoryStore provides an in-memory implementation of SimpleStore
+// MemoryStore provides an in-memory implementation of Store
 // for testing purposes
-type SimpleMemoryStore struct {
+type Memory struct {
 	storeBase
 	v map[string][]byte
 }
 
-func NewSimpleMemoryStore(codec Codec) *SimpleMemoryStore {
+func (m *Memory) Open(codec Codec) error {
 	if codec == nil {
 		codec = DefaultCodec
 	}
-	res := &SimpleMemoryStore{v: make(map[string][]byte)}
-	res.Codec = codec
-	res.closer = func() {
-		res.v = nil
+	m.Codec = codec
+	m.closer = func() {
+		m.v = nil
 	}
-	return res
+	m.v = map[string][]byte{}
+	m.opened = true
+	return nil
 }
 
-func (m *SimpleMemoryStore) MakeSub(loc string) (SimpleStore, error) {
+func (m *Memory) MakeSub(loc string) (Store, error) {
 	m.Lock()
 	defer m.Unlock()
 	m.panicIfClosed()
-	res := NewSimpleMemoryStore(m.Codec)
+	res := &Memory{}
+	res.Open(m.Codec)
 	addSub(m, res, loc)
 	return res, nil
 }
 
-func (m *SimpleMemoryStore) Keys() ([]string, error) {
+func (m *Memory) Keys() ([]string, error) {
 	m.RLock()
 	m.panicIfClosed()
 	res := make([]string, 0, len(m.v))
@@ -39,7 +41,7 @@ func (m *SimpleMemoryStore) Keys() ([]string, error) {
 	return res, nil
 }
 
-func (m *SimpleMemoryStore) Load(key string, val interface{}) error {
+func (m *Memory) Load(key string, val interface{}) error {
 	m.RLock()
 	m.panicIfClosed()
 	v, ok := m.v[key]
@@ -50,7 +52,7 @@ func (m *SimpleMemoryStore) Load(key string, val interface{}) error {
 	return m.Decode(v, val)
 }
 
-func (m *SimpleMemoryStore) Save(key string, val interface{}) error {
+func (m *Memory) Save(key string, val interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	m.panicIfClosed()
@@ -65,7 +67,7 @@ func (m *SimpleMemoryStore) Save(key string, val interface{}) error {
 	return nil
 }
 
-func (m *SimpleMemoryStore) Remove(key string) error {
+func (m *Memory) Remove(key string) error {
 	m.Lock()
 	defer m.Unlock()
 	m.panicIfClosed()

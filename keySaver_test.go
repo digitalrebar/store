@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	currentStore SimpleStore
+	currentStore Store
 	failed       = errors.New("Failed hook")
 )
 
@@ -40,7 +40,7 @@ func (t *TestVal) New() KeySaver {
 	return &TestVal{}
 }
 
-func (t *TestVal) Backend() SimpleStore {
+func (t *TestVal) Backend() Store {
 	return currentStore
 }
 
@@ -163,7 +163,8 @@ func runTests(t *testing.T, toRun []test) {
 }
 
 // Expects a freshly-created store
-func testOneStore(t *testing.T) {
+func testOneStore(t *testing.T, s Store) {
+	currentStore = s
 	runTests(t, tests)
 	// At the end, the store should be empty
 	ents, err := currentStore.Keys()
@@ -198,59 +199,60 @@ func testOneStore(t *testing.T) {
 	runTests(t, roTests)
 }
 
-func testStore(t *testing.T) {
+func testStore(t *testing.T, s Store) {
 	t.Logf("Testing top-level store")
-	testOneStore(t)
+	testOneStore(t, s)
 	var err error
-	_, err = currentStore.MakeSub("sub1")
+	_, err = s.MakeSub("sub1")
 	if err != nil {
 		t.Errorf("Error creating substore sub1")
 		return
 	}
 	t.Logf("Testing substore sub1")
-	currentStore = currentStore.GetSub("sub1")
-	testOneStore(t)
-	_, err = currentStore.MakeSub("sub2")
+	sub1 := s.GetSub("sub1")
+	testOneStore(t, sub1)
+	_, err = sub1.MakeSub("sub2")
 	if err != nil {
 		t.Errorf("Error creating substore sub2")
 		return
 	}
 	t.Logf("Testing substore sub2")
-	currentStore = currentStore.GetSub("sub2")
-	testOneStore(t)
+	testOneStore(t, sub1.GetSub("sub2"))
 }
 
 func TestMemoryStore(t *testing.T) {
-	currentStore = NewSimpleMemoryStore(nil)
+	s := &Memory{}
+	s.Open(nil)
 	t.Log("Testing simple memory store")
-	testStore(t)
+	testStore(t, s)
 	t.Log("Memory store test finished")
 }
 
-func TestLocalStore(t *testing.T) {
-	t.Logf("Creating tmpdir for LocalStore testing")
-	tmpDir, err := ioutil.TempDir("", "localstore-")
+func testPersistent(t *testing.T, maker func(string) (Store, error)) {
+	t.Logf("Creating tmpdir for persistent testing")
+	tmpDir, err := ioutil.TempDir("", "store-")
 	if err != nil {
-		t.Errorf("Failed to create tmp dir for LocalStore testing")
+		t.Errorf("Failed to create tmp dir for persistent testing")
 		return
 	}
 	t.Logf("Running in %s", tmpDir)
 	defer os.RemoveAll(tmpDir)
-	currentStore, err = NewSimpleLocalStore(tmpDir, YamlCodec)
+	s, err := maker(tmpDir)
 	if err != nil {
-		t.Errorf("Failed to create local store: %v", err)
+		t.Errorf("Failed to create store: %v", err)
 		return
 	}
-	t.Log("Testing local store")
-	testStore(t)
+	t.Logf("Store: %#v", s)
+	t.Log("Testing store")
+	testStore(t, s)
 	t.Log("Testing persistence of local substore hierarchy")
-	currentStore.Close()
-	currentStore, err = NewSimpleLocalStore(tmpDir, YamlCodec)
+	s.Close()
+	s, err = maker(tmpDir)
 	if err != nil {
-		t.Errorf("Failed to reload local store: %v", err)
+		t.Errorf("Failed to reload store: %v", err)
 		return
 	}
-	sub1 := currentStore.GetSub("sub1")
+	sub1 := s.GetSub("sub1")
 	if sub1 == nil {
 		t.Errorf("Did not load expected substore sub1")
 		return
@@ -260,41 +262,21 @@ func TestLocalStore(t *testing.T) {
 		t.Errorf("Did not load expected substore sub2")
 		return
 	}
-	t.Logf("Local store test finished")
+	t.Logf("Persistent test finished")
 }
 
-func TestDirStore(t *testing.T) {
-	t.Logf("Creating tmpdir for LocalStore testing")
-	tmpDir, err := ioutil.TempDir("", "filestore-")
-	if err != nil {
-		t.Errorf("Failed to create tmp dir for DirStore testing")
-		return
-	}
-	t.Logf("Running in %s", tmpDir)
-	defer os.RemoveAll(tmpDir)
-	currentStore, err = NewDirBackend(tmpDir, JsonCodec)
-	if err != nil {
-		t.Errorf("Failed to create file store: %v", err)
-		return
-	}
-	t.Log("Testing file store")
-	testStore(t)
-	t.Log("Testing persistence of dir substore hierarchy")
-	currentStore.Close()
-	currentStore, err = NewDirBackend(tmpDir, JsonCodec)
-	if err != nil {
-		t.Errorf("Failed to reload dir store: %v", err)
-		return
-	}
-	sub1 := currentStore.GetSub("sub1")
-	if sub1 == nil {
-		t.Errorf("Did not load expected substore sub1")
-		return
-	}
-	sub2 := sub1.GetSub("sub2")
-	if sub2 == nil {
-		t.Errorf("Did not load expected substore sub2")
-		return
-	}
-	t.Log("File store test finished")
+func TestLocalStore(t *testing.T) {
+	t.Logf("Testing boltdb Store with JSON codec")
+	testPersistent(t, func(tgt string) (Store, error) {
+		res := &Bolt{Path: tgt}
+		return res, res.Open(nil)
+	})
+}
+
+func TestDirectory(t *testing.T) {
+	t.Logf("Testing directory store with YAML codec")
+	testPersistent(t, func(tgt string) (Store, error) {
+		res := &Directory{Path: tgt}
+		return res, res.Open(YamlCodec)
+	})
 }

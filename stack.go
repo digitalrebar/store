@@ -4,57 +4,75 @@ import "fmt"
 
 type StackedStore struct {
 	storeBase
-	stores []SimpleStore
-	top    SimpleStore
+	stores []Store
+	top    Store
 	keys   map[string]int
 }
 
-func NewStackedStore(stores ...SimpleStore) (*StackedStore, error) {
-	if stores == nil || len(stores) == 0 {
-		return nil, fmt.Errorf("Stacked store must include a list of stores to stack")
+func (s *StackedStore) Open(codec Codec) error {
+	s.Codec = codec
+	s.stores = []Store{}
+	s.keys = map[string]int{}
+	s.opened = true
+	s.closer = func() {
+		for _, item := range s.stores {
+			item.Close()
+		}
 	}
-	res := &StackedStore{}
-	res.stores = stores
-	res.top = stores[len(stores)-1]
+	return nil
+}
+
+func (s *StackedStore) Push(stores ...Store) error {
+	if len(stores) == 0 {
+		return nil
+	}
+	s.Lock()
+	defer s.Unlock()
+	s.panicIfClosed()
+	oldLen := len(s.stores)
+	s.stores = append(s.stores, stores...)
+	// Cache the top store for quick access
+	s.top = stores[len(stores)-1]
 	if len(stores) > 1 {
 		for i := len(stores) - 2; i >= 0; i-- {
 			stores[i].SetReadOnly()
 		}
 	}
-	subStacks := map[string][]SimpleStore{}
+	// Update the key mappings
+	subStacks := map[string][]Store{}
 	for i, item := range stores {
 		newKeys, err := item.Keys()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, k := range newKeys {
-			res.keys[k] = i
+			s.keys[k] = i + oldLen
 		}
 		for k, v := range item.Subs() {
 			if _, ok := subStacks[k]; !ok {
-				subStacks[k] = []SimpleStore{v}
+				subStacks[k] = []Store{v}
 			} else {
 				subStacks[k] = append(subStacks[k], v)
 			}
 		}
 	}
+	// Update or create new subs as needed.
 	for k, v := range subStacks {
-		sub, err := NewStackedStore(v...)
-		if err != nil {
-			return nil, err
+		sub := s.subStores[k].(*StackedStore)
+		if sub == nil {
+			sub = &StackedStore{}
+			sub.Open(s.Codec)
+		}
+		if err := sub.Push(v...); err != nil {
+			return err
 		}
 		sub.closer = nil
-		addSub(res, sub, k)
+		addSub(s, sub, k)
 	}
-	res.closer = func() {
-		for _, item := range stores {
-			item.Close()
-		}
-	}
-	return res, nil
+	return nil
 }
 
-func (s *StackedStore) MakeSub(st string) (SimpleStore, error) {
+func (s *StackedStore) MakeSub(st string) (Store, error) {
 	return nil, fmt.Errorf("Cannot create substore %s on a stacked store", st)
 }
 

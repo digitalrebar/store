@@ -20,7 +20,7 @@ type KeySaver interface {
 	Prefix() string
 	Key() string
 	New() KeySaver
-	Backend() SimpleStore
+	Backend() Store
 }
 
 //LoadHooker is the interface that things can satisfy if they want to
@@ -91,7 +91,7 @@ type AfterSaveHooker interface {
 	AfterSave()
 }
 
-func load(s SimpleStore, k KeySaver, key string, runhook bool) (bool, error) {
+func load(s Store, k KeySaver, key string, runhook bool) (bool, error) {
 	err := s.Load(key, k)
 	if err != nil {
 		return false, err
@@ -153,7 +153,7 @@ func Remove(k KeySaver) (bool, error) {
 	return true, nil
 }
 
-func save(s SimpleStore, k KeySaver) (bool, error) {
+func save(s Store, k KeySaver) (bool, error) {
 	if h, ok := k.(BeforeSaveHooker); ok {
 		if err := h.BeforeSave(); err != nil {
 			return false, err

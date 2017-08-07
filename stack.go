@@ -2,10 +2,13 @@ package store
 
 import "fmt"
 
+// StackedStore is a store that represents the combination of several
+// stores stacked together.  The first store in the stack is the only
+// one that is writable, and the rest are set as read-only.
+// StackedStores are initally created empty.
 type StackedStore struct {
 	storeBase
 	stores []Store
-	top    Store
 	keys   map[string]int
 }
 
@@ -22,6 +25,8 @@ func (s *StackedStore) Open(codec Codec) error {
 	return nil
 }
 
+// Push adds a Store to the stack of stores in this stack.  Any Store
+// but the inital one will be marked as read-only.
 func (s *StackedStore) Push(stores ...Store) error {
 	if len(stores) == 0 {
 		return nil
@@ -32,10 +37,9 @@ func (s *StackedStore) Push(stores ...Store) error {
 	oldLen := len(s.stores)
 	s.stores = append(s.stores, stores...)
 	// Cache the top store for quick access
-	s.top = stores[len(stores)-1]
-	if len(stores) > 1 {
-		for i := len(stores) - 2; i >= 0; i-- {
-			stores[i].SetReadOnly()
+	for i := oldLen; i == len(s.stores); i++ {
+		if i > 0 {
+			s.stores[i].SetReadOnly()
 		}
 	}
 	// Update the key mappings
@@ -46,7 +50,9 @@ func (s *StackedStore) Push(stores ...Store) error {
 			return err
 		}
 		for _, k := range newKeys {
-			s.keys[k] = i + oldLen
+			if _, ok := s.keys[k]; !ok {
+				s.keys[k] = i + oldLen
+			}
 		}
 		for k, v := range item.Subs() {
 			if _, ok := subStacks[k]; !ok {
@@ -72,6 +78,7 @@ func (s *StackedStore) Push(stores ...Store) error {
 	return nil
 }
 
+// MakeSub on a StackedStore is not allowed.
 func (s *StackedStore) MakeSub(st string) (Store, error) {
 	return nil, fmt.Errorf("Cannot create substore %s on a stacked store", st)
 }
@@ -99,9 +106,9 @@ func (s *StackedStore) Load(key string, val interface{}) error {
 func (s *StackedStore) Save(key string, val interface{}) error {
 	s.RLock()
 	defer s.RUnlock()
-	err := s.top.Save(key, val)
+	err := s.stores[0].Save(key, val)
 	if err == nil {
-		s.keys[key] = len(s.stores) - 1
+		s.keys[key] = 0
 	}
 	return err
 }
@@ -113,20 +120,20 @@ func (s *StackedStore) Remove(key string) error {
 	if !ok {
 		return NotFound(key)
 	}
-	if idx != len(s.stores)-1 {
+	if idx != 0 {
 		return UnWritable(key)
 	}
-	return s.top.Remove(key)
+	return s.stores[0].Remove(key)
 }
 
 func (s *StackedStore) ReadOnly() bool {
 	s.RLock()
 	defer s.RUnlock()
-	return s.top.ReadOnly()
+	return s.stores[0].ReadOnly()
 }
 
 func (s *StackedStore) SetReadOnly() bool {
 	s.RLock()
 	defer s.RUnlock()
-	return s.top.SetReadOnly()
+	return s.stores[0].SetReadOnly()
 }

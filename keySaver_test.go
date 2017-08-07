@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
+	"path"
 	"testing"
 )
 
@@ -236,7 +236,7 @@ func testPersistent(t *testing.T, maker func(string) (Store, error)) {
 		return
 	}
 	t.Logf("Running in %s", tmpDir)
-	defer os.RemoveAll(tmpDir)
+	//defer os.RemoveAll(tmpDir)
 	s, err := maker(tmpDir)
 	if err != nil {
 		t.Errorf("Failed to create store: %v", err)
@@ -277,6 +277,14 @@ func TestDirectory(t *testing.T) {
 	t.Logf("Testing directory store with YAML codec")
 	testPersistent(t, func(tgt string) (Store, error) {
 		res := &Directory{Path: tgt}
+		return res, res.Open(YamlCodec)
+	})
+}
+
+func TestFile(t *testing.T) {
+	t.Logf("Testing flat file store with YAML codec")
+	testPersistent(t, func(tgt string) (Store, error) {
+		res := &File{Path: path.Join(tgt, "data.yaml")}
 		return res, res.Open(YamlCodec)
 	})
 }

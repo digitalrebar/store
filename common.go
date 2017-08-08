@@ -2,8 +2,76 @@ package store
 
 import (
 	"fmt"
+	"net/url"
 	"sync"
 )
+
+// Open a store via URI style locator. Locators have the following format:
+//
+// storeType://host:port/path?codec=codecType&ro=false&option=foo
+//
+// All store types take codec and ro as optional parameters
+//
+// The following storeTypes are known:
+//   * file, in which path refers to a single local file.
+//   * directory, in which path refers to a top-level directory
+//   * consul, in which path refers to the top key in the kv store.
+//   * bolt, in which path refers to the directory where the Bolt database
+//     is located.  bolt also takes an optional bucket parameter to specify the
+//     top-level bucket data is stored in.
+//   * memory, in which path does not mean anything.
+//
+func Open(locator string) (Store, error) {
+	uri, err := url.Parse(locator)
+	if err != nil {
+		return nil, err
+	}
+	params := uri.Query()
+	codec := DefaultCodec
+	readOnly := false
+	codecParam := params.Get("codec")
+	switch codecParam {
+	case "yaml":
+		codec = YamlCodec
+	case "json":
+		codec = JsonCodec
+	case "", "default":
+		codec = DefaultCodec
+	default:
+		return nil, fmt.Errorf("Unknown codec %s", codecParam)
+	}
+	roParam := params.Get("ro")
+	switch roParam {
+	case "true", "yes", "1":
+		readOnly = true
+	case "false", "no", "0", "":
+		readOnly = false
+	default:
+		return nil, fmt.Errorf("Unknown ro value %s. Try true or false", roParam)
+	}
+	var res Store
+	switch uri.Scheme {
+	case "file":
+		res = &File{Path: uri.Path}
+	case "directory":
+		res = &Directory{Path: uri.Path}
+	case "bolt":
+		res = &Bolt{Path: uri.Path}
+		bucketParam := params.Get("bucket")
+		if bucketParam != "" {
+			res.(*Bolt).Bucket = []byte(bucketParam)
+		}
+	case "consul":
+		res = &Consul{BaseKey: uri.Path}
+	}
+	if err := res.Open(codec); err != nil {
+		return nil, err
+	}
+	if readOnly {
+		res.SetReadOnly()
+	}
+	return res, nil
+}
 
 // Store provides an interface for some very basic key/value
 // storage needs.  Each Store (including ones created with MakeSub()

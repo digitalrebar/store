@@ -20,6 +20,16 @@ func (c *Consul) Open(codec Codec) error {
 		codec = DefaultCodec
 	}
 	c.Codec = codec
+	if c.Client == nil {
+		client, err := consul.NewClient(consul.DefaultConfig())
+		if err != nil {
+			return err
+		}
+		if _, err = client.Agent().Self(); err != nil {
+			return err
+		}
+		c.Client = client
+	}
 	keys, _, err := c.Client.KV().Keys(c.BaseKey, "", nil)
 	if err != nil {
 		return err

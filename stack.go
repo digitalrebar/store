@@ -78,6 +78,14 @@ func (s *StackedStore) Push(stores ...Store) error {
 	return nil
 }
 
+func (s *StackedStore) Layers() []Store {
+	s.Lock()
+	defer s.Unlock()
+	res := make([]Store, len(s.stores))
+	copy(res, s.stores)
+	return res
+}
+
 // MakeSub on a StackedStore is not allowed.
 func (s *StackedStore) MakeSub(st string) (Store, error) {
 	return nil, fmt.Errorf("Cannot create substore %s on a stacked store", st)

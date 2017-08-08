@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -10,7 +11,9 @@ import (
 // Consul implements a Store that is backed by the Consul key/value store.
 type Consul struct {
 	storeBase
-	Client *consul.Client
+	source  string
+	version string
+	Client  *consul.Client
 
 	BaseKey string
 }
@@ -25,15 +28,18 @@ func (c *Consul) Open(codec Codec) error {
 		if err != nil {
 			return err
 		}
-		if _, err = client.Agent().Self(); err != nil {
+		if info, err := client.Agent().Self(); err != nil {
 			return err
+		} else {
+			c.source = fmt.Sprintf("consul: from %s", info["Config"]["NodeName"].(string))
 		}
 		c.Client = client
 	}
-	keys, _, err := c.Client.KV().Keys(c.BaseKey, "", nil)
+	keys, qm, err := c.Client.KV().Keys(c.BaseKey, "", nil)
 	if err != nil {
 		return err
 	}
+	c.version = fmt.Sprintf("%d", qm.LastIndex)
 	c.opened = true
 	for i := range keys {
 		if !strings.HasSuffix(keys[i], "/") {
@@ -48,6 +54,10 @@ func (c *Consul) Open(codec Codec) error {
 		c.Client = nil
 	}
 	return nil
+}
+
+func (c *Consul) Type() string {
+	return "consul"
 }
 
 func (b *Consul) MakeSub(prefix string) (Store, error) {

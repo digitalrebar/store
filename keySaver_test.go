@@ -254,6 +254,11 @@ func testPersistent(t *testing.T, storeType, storeCodec string) {
 	t.Logf("Store: %#v", s)
 	t.Log("Testing store")
 	testStore(t, s)
+	if meta, ok := s.(MetaSaver); ok {
+		if err := meta.SetMetaData(map[string]string{"foo": "bar"}); err != nil {
+			t.Errorf("Error setting metadata: %v", err)
+		}
+	}
 	t.Log("Testing persistence of local substore hierarchy")
 	s.Close()
 	s, err = Open(storeURI)
@@ -270,6 +275,12 @@ func testPersistent(t *testing.T, storeType, storeCodec string) {
 	if sub2 == nil {
 		t.Errorf("Did not load expected substore sub2")
 		return
+	}
+	if meta, ok := s.(MetaSaver); ok {
+		vals := meta.MetaData()
+		if vals["foo"] != "bar" {
+			t.Errorf("Metadata did not persist")
+		}
 	}
 	t.Logf("Persistent test finished")
 }

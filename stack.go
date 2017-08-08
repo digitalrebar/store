@@ -12,6 +12,10 @@ type StackedStore struct {
 	keys   map[string]int
 }
 
+func (s *StackedStore) Type() string {
+	return "stacked"
+}
+
 func (s *StackedStore) Open(codec Codec) error {
 	s.Codec = codec
 	s.stores = []Store{}

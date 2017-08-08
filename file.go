@@ -13,6 +13,42 @@ type File struct {
 	storeBase
 	Path string
 	vals map[string][]byte
+	meta map[string]string
+}
+
+func (f *File) Type() string {
+	return "file"
+}
+
+func (f *File) MetaData() map[string]string {
+	f.RLock()
+	defer f.RUnlock()
+	if f.parentStore != nil {
+		return f.parentStore.(*File).MetaData()
+	}
+	res := map[string]string{}
+	for k, v := range f.meta {
+		res[k] = v
+	}
+	return res
+}
+
+func (f *File) SetMetaData(vals map[string]string) error {
+	f.Lock()
+	defer f.Unlock()
+	if f.parentStore != nil {
+		return f.parentStore.(*File).SetMetaData(vals)
+	}
+	oldMeta := f.meta
+	f.meta = map[string]string{}
+	for k, v := range vals {
+		f.meta[k] = v
+	}
+	err := f.save()
+	if err != nil {
+		f.meta = oldMeta
+	}
+	return err
 }
 
 func (f *File) MakeSub(path string) (Store, error) {
@@ -41,8 +77,10 @@ func (f *File) mux() *sync.RWMutex {
 
 func (f *File) open(vals map[string]interface{}) error {
 	f.vals = map[string][]byte{}
+	f.meta = map[string]string{}
 	for k, v := range vals {
-		if k == "sections" {
+		switch k {
+		case "$sections":
 			subSections, ok := v.(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("Invalid sections declaration: %#v", v)
@@ -55,7 +93,19 @@ func (f *File) open(vals map[string]interface{}) error {
 				}
 				addSub(f, sub, subName)
 			}
-		} else {
+		case "$meta":
+			metaData, ok := v.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("Invalid metadata declaration: %#v", v)
+			}
+			for metaName, metaVal := range metaData {
+				if val, ok := metaVal.(string); ok {
+					f.meta[metaName] = val
+				} else {
+					return fmt.Errorf("Metadata value %#v is not a string", metaVal)
+				}
+			}
+		default:
 			buf, err := f.Encode(v)
 			if err != nil {
 				return err
@@ -126,18 +176,20 @@ func (f *File) prepSave() (map[string]interface{}, error) {
 		}
 		res[k] = obj
 	}
-	if len(f.subStores) == 0 {
-		return res, nil
-	}
-	subs := map[string]interface{}{}
-	for subName, subStore := range f.subStores {
-		subVals, err := subStore.(*File).prepSave()
-		if err != nil {
-			return nil, err
+	if len(f.subStores) > 0 {
+		subs := map[string]interface{}{}
+		for subName, subStore := range f.subStores {
+			subVals, err := subStore.(*File).prepSave()
+			if err != nil {
+				return nil, err
+			}
+			subs[subName] = subVals
 		}
-		subs[subName] = subVals
+		res["$sections"] = subs
 	}
-	res["sections"] = subs
+	if len(f.meta) > 0 {
+		res["$meta"] = f.meta
+	}
 	return res, nil
 }
 

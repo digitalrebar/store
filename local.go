@@ -16,6 +16,45 @@ type Bolt struct {
 	Bucket []byte
 }
 
+func (b *Bolt) Type() string {
+	return "bolt"
+}
+
+func (b *Bolt) MetaData() map[string]string {
+	res := map[string]string{}
+	b.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte("$metadata"))
+		if bucket == nil {
+			return nil
+		}
+		bucket.ForEach(func(k, v []byte) error {
+			if v == nil {
+				return nil
+			}
+			res[string(k)] = string(v)
+			return nil
+		})
+		return nil
+	})
+	return res
+}
+
+func (b *Bolt) SetMetaData(vals map[string]string) error {
+	return b.db.Update(func(tx *bolt.Tx) error {
+		tx.DeleteBucket([]byte("$metadata"))
+		bucket, err := tx.CreateBucket([]byte("$metadata"))
+		if err != nil {
+			return err
+		}
+		for k, v := range vals {
+			if err := bucket.Put([]byte(k), []byte(v)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (b *Bolt) getBucket(tx *bolt.Tx) (res *bolt.Bucket) {
 	for _, part := range bytes.Split(b.Bucket, []byte("/")) {
 		if res == nil {

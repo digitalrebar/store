@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 	"testing"
 )
@@ -190,7 +191,9 @@ func testOneStore(t *testing.T, s Store) {
 		t.Errorf("Expected 1 key, got %d", len(keys))
 	}
 	for _, k := range keys {
-		currentStore.Remove(k)
+		if err := currentStore.Remove(k); err != nil {
+			t.Errorf("Error removing key %s", k)
+		}
 	}
 	runTests(t, createTests)
 	if !currentStore.SetReadOnly() {
@@ -228,7 +231,7 @@ func TestMemoryStore(t *testing.T) {
 	t.Log("Memory store test finished")
 }
 
-func testPersistent(t *testing.T, maker func(string) (Store, error)) {
+func testPersistent(t *testing.T, storeType, storeCodec string) {
 	t.Logf("Creating tmpdir for persistent testing")
 	tmpDir, err := ioutil.TempDir("", "store-")
 	if err != nil {
@@ -236,8 +239,15 @@ func testPersistent(t *testing.T, maker func(string) (Store, error)) {
 		return
 	}
 	t.Logf("Running in %s", tmpDir)
-	//defer os.RemoveAll(tmpDir)
-	s, err := maker(tmpDir)
+	defer os.RemoveAll(tmpDir)
+	var storeLoc string
+	if storeType == "file" {
+		storeLoc = path.Join(tmpDir, "data."+storeCodec)
+	} else {
+		storeLoc = tmpDir
+	}
+	storeURI := fmt.Sprintf("%s://%s?codec=%s", storeType, storeLoc, storeCodec)
+	s, err := Open(storeURI)
 	if err != nil {
 		t.Errorf("Failed to create store: %v", err)
 		return
@@ -247,7 +257,7 @@ func testPersistent(t *testing.T, maker func(string) (Store, error)) {
 	testStore(t, s)
 	t.Log("Testing persistence of local substore hierarchy")
 	s.Close()
-	s, err = maker(tmpDir)
+	s, err = Open(storeURI)
 	if err != nil {
 		t.Errorf("Failed to reload store: %v", err)
 		return
@@ -265,26 +275,14 @@ func testPersistent(t *testing.T, maker func(string) (Store, error)) {
 	t.Logf("Persistent test finished")
 }
 
-func TestLocalStore(t *testing.T) {
-	t.Logf("Testing boltdb Store with JSON codec")
-	testPersistent(t, func(tgt string) (Store, error) {
-		res := &Bolt{Path: tgt}
-		return res, res.Open(nil)
-	})
-}
-
-func TestDirectory(t *testing.T) {
-	t.Logf("Testing directory store with YAML codec")
-	testPersistent(t, func(tgt string) (Store, error) {
-		res := &Directory{Path: tgt}
-		return res, res.Open(YamlCodec)
-	})
-}
-
-func TestFile(t *testing.T) {
-	t.Logf("Testing flat file store with YAML codec")
-	testPersistent(t, func(tgt string) (Store, error) {
-		res := &File{Path: path.Join(tgt, "data.yaml")}
-		return res, res.Open(YamlCodec)
-	})
+func TestPersistentStores(t *testing.T) {
+	storeCodecs := []string{"json", "yaml", "default"}
+	storeType := []string{"bolt", "directory", "file"}
+	for _, codec := range storeCodecs {
+		for _, storeType := range storeType {
+			t.Logf("Testing persistent store %s with codec %s", storeType, codec)
+			testPersistent(t, storeType, codec)
+			t.Logf("--------------------------------------------------------")
+		}
+	}
 }

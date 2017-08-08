@@ -224,8 +224,7 @@ func testStore(t *testing.T, s Store) {
 }
 
 func TestMemoryStore(t *testing.T) {
-	s := &Memory{}
-	s.Open(nil)
+	s, _ := Open("memory:///")
 	t.Log("Testing simple memory store")
 	testStore(t, s)
 	t.Log("Memory store test finished")

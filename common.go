@@ -63,6 +63,8 @@ func Open(locator string) (Store, error) {
 		}
 	case "consul":
 		res = &Consul{BaseKey: uri.Path}
+	case "memory":
+		res = &Memory{}
 	}
 	if err := res.Open(codec); err != nil {
 		return nil, err

@@ -103,6 +103,9 @@ func (d *Directory) SetMetaData(vals map[string]string) error {
 }
 
 func (f *Directory) Open(codec Codec) error {
+	if f.Path == "" {
+		return fmt.Errorf("Cannot store data at ''")
+	}
 	fullPath, err := filepath.Abs(filepath.Clean(f.Path))
 	if err != nil {
 		return err

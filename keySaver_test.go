@@ -245,7 +245,7 @@ func testPersistent(t *testing.T, storeType, storeCodec string) {
 	} else {
 		storeLoc = tmpDir
 	}
-	storeURI := fmt.Sprintf("%s://%s?codec=%s", storeType, storeLoc, storeCodec)
+	storeURI := fmt.Sprintf("%s:%s?codec=%s", storeType, storeLoc, storeCodec)
 	s, err := Open(storeURI)
 	if err != nil {
 		t.Errorf("Failed to create store: %v", err)
@@ -293,6 +293,9 @@ func TestPersistentStores(t *testing.T) {
 			t.Logf("Testing persistent store %s with codec %s", storeType, codec)
 			testPersistent(t, storeType, codec)
 			t.Logf("--------------------------------------------------------")
+			if t.Failed() {
+				return
+			}
 		}
 	}
 }

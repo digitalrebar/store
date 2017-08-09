@@ -141,6 +141,9 @@ func (b *Bolt) Open(codec Codec) error {
 	}
 	b.Codec = codec
 	if b.db == nil {
+		if b.Path == "" {
+			return fmt.Errorf("Cannot store data in ''")
+		}
 		finalLoc := filepath.Clean(b.Path)
 		if err := os.MkdirAll(finalLoc, 0755); err != nil {
 			return err

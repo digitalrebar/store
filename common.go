@@ -18,9 +18,13 @@ func safeReplace(name string, contents []byte) error {
 	return os.Rename(tmpName, name)
 }
 
-// Open a store via URI style locator. Locators have the following format:
+// Open a store via URI style locator. Locators have the following formats:
 //
-// storeType://host:port/path?codec=codecType&ro=false&option=foo
+// storeType:path?codec=codecType&ro=false&option=foo for stores
+// that always refer to something local, and
+//
+// storeType://host:port/path?codec=codecType&ro=false&option=foo for stores
+// that need to talk over the network.
 //
 // All store types take codec and ro as optional parameters
 //
@@ -33,6 +37,7 @@ func safeReplace(name string, contents []byte) error {
 //     top-level bucket data is stored in.
 //   * memory, in which path does not mean anything.
 //
+
 func Open(locator string) (Store, error) {
 	uri, err := url.Parse(locator)
 	if err != nil {
@@ -62,23 +67,30 @@ func Open(locator string) (Store, error) {
 		return nil, fmt.Errorf("Unknown ro value %s. Try true or false", roParam)
 	}
 	var res Store
+	path := uri.Opaque
+	if path == "" {
+		path = uri.Path
+	}
 	switch uri.Scheme {
 	case "stack":
 		res = &StackedStore{}
 	case "file":
-		res = &File{Path: uri.Path}
+		res = &File{Path: path}
 	case "directory":
-		res = &Directory{Path: uri.Path}
+		res = &Directory{Path: path}
 	case "bolt":
-		res = &Bolt{Path: uri.Path}
+		res = &Bolt{Path: path}
 		bucketParam := params.Get("bucket")
 		if bucketParam != "" {
 			res.(*Bolt).Bucket = []byte(bucketParam)
 		}
 	case "consul":
-		res = &Consul{BaseKey: uri.Path}
+		res = &Consul{BaseKey: path}
 	case "memory":
 		res = &Memory{}
+	}
+	if err != nil {
+		return nil, err
 	}
 	if err := res.Open(codec); err != nil {
 		return nil, err

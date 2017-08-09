@@ -118,6 +118,9 @@ func (f *File) open(vals map[string]interface{}) error {
 }
 
 func (f *File) Open(codec Codec) error {
+	if f.Path == "" {
+		return fmt.Errorf("Cannot store data at ''")
+	}
 	fullPath, err := filepath.Abs(filepath.Clean(f.Path))
 	if err != nil {
 		return err

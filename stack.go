@@ -1,7 +1,5 @@
 package store
 
-import "fmt"
-
 // StackedStore is a store that represents the combination of several
 // stores stacked together.  The first store in the stack is the only
 // one that is writable, and the rest are set as read-only.
@@ -94,7 +92,43 @@ func (s *StackedStore) Layers() []Store {
 
 // MakeSub on a StackedStore is not allowed.
 func (s *StackedStore) MakeSub(st string) (Store, error) {
-	return nil, fmt.Errorf("Cannot create substore %s on a stacked store", st)
+	s.Lock()
+	defer s.Unlock()
+	s.panicIfClosed()
+	var mySub *StackedStore
+	var err error
+	if sub, ok := s.subStores[st]; ok {
+		mySub = sub.(*StackedStore)
+	}
+	sub := s.stores[0].GetSub(st)
+	if sub != nil && mySub != nil {
+		return mySub, nil
+	}
+	if sub == nil {
+		sub, err = s.stores[0].MakeSub(st)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if mySub == nil {
+		mySub = &StackedStore{}
+		mySub.Open(s.Codec)
+		if err := mySub.Push(sub); err != nil {
+			return nil, err
+		}
+		addSub(s, mySub, st)
+		return mySub, nil
+	}
+	subStores := []Store{sub}
+	subStores = append(subStores, mySub.stores...)
+	newSub := &StackedStore{}
+	newSub.Open(s.Codec)
+	if err := newSub.Push(subStores...); err != nil {
+		return nil, err
+	}
+	mySub.opened = false
+	addSub(s, newSub, st)
+	return newSub, nil
 }
 
 func (s *StackedStore) Keys() ([]string, error) {

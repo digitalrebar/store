@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -15,8 +16,90 @@ type Directory struct {
 	Path string
 }
 
+func (d *Directory) Type() string {
+	return "directory"
+}
+
 func (f *Directory) name(n string) string {
-	return filepath.Join(f.Path, url.QueryEscape(n)) + f.Ext()
+	return filepath.Join(f.Path, url.QueryEscape(n))
+}
+
+func (d *Directory) MetaData() (res map[string]string) {
+	d.RLock()
+	defer d.RUnlock()
+	if d.parentStore != nil {
+		return d.parentStore.(*Directory).MetaData()
+	}
+	res = map[string]string{}
+	dir, err := os.Open(d.Path)
+	if err != nil {
+		return
+	}
+	infos, err := dir.Readdir(0)
+	dir.Close()
+	if err != nil {
+		return
+	}
+	for _, info := range infos {
+		if info.IsDir() {
+			continue
+		}
+		name := info.Name()
+		if !(strings.HasPrefix(name, "._") && strings.HasSuffix(name, ".meta")) {
+			continue
+		}
+		key, err := url.QueryUnescape(name)
+		if err != nil {
+			continue
+		}
+		key = strings.TrimSuffix(strings.TrimPrefix(key, "._"), ".meta")
+		buf, err := ioutil.ReadFile(path.Join(d.Path, name))
+		if err != nil {
+			continue
+		}
+		val := strings.TrimSpace(string(buf))
+		if val == "" {
+			continue
+		}
+		res[key] = val
+	}
+	return res
+}
+
+func (d *Directory) SetMetaData(vals map[string]string) error {
+	d.Lock()
+	defer d.Unlock()
+	if d.parentStore != nil {
+		return d.parentStore.(*Directory).SetMetaData(vals)
+	}
+	written := map[string]struct{}{}
+	for k, v := range vals {
+		fileName := d.name("._" + k + ".meta")
+		if err := ioutil.WriteFile(fileName, []byte(v), 0644); err != nil {
+			panic(err.Error())
+		}
+		written[path.Base(d.name("._"+k+".meta"))] = struct{}{}
+	}
+	// Clean out the metadata values we no longer want
+	dir, err := os.Open(d.Path)
+	if err != nil {
+		return err
+	}
+	infos, err := dir.Readdir(0)
+	dir.Close()
+	if err != nil {
+		return err
+	}
+	for _, info := range infos {
+		if info.IsDir() {
+			continue
+		}
+		if _, ok := written[info.Name()]; ok {
+			continue
+		}
+		os.Remove(path.Join(d.Path, info.Name()))
+	}
+	return nil
 }
 
 func (f *Directory) Open(codec Codec) error {
@@ -36,6 +119,7 @@ func (f *Directory) Open(codec Codec) error {
 		return err
 	}
 	infos, err := d.Readdir(0)
+	d.Close()
 	if err != nil {
 		return err
 	}
@@ -96,7 +180,7 @@ func (f *Directory) Keys() ([]string, error) {
 
 func (f *Directory) Load(key string, val interface{}) error {
 	f.panicIfClosed()
-	buf, err := ioutil.ReadFile(f.name(key))
+	buf, err := ioutil.ReadFile(f.name(key + f.Ext()))
 	if err != nil {
 		return err
 	}
@@ -112,7 +196,7 @@ func (f *Directory) Save(key string, val interface{}) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.Create(f.name(key))
+	file, err := os.Create(f.name(key + f.Ext()))
 	if err != nil {
 		return err
 	}
@@ -131,5 +215,5 @@ func (f *Directory) Remove(key string) error {
 	if f.ReadOnly() {
 		return UnWritable(key)
 	}
-	return os.Remove(f.name(key))
+	return os.Remove(f.name(key + f.Ext()))
 }

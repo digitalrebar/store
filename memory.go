@@ -4,7 +4,38 @@ package store
 // for testing purposes
 type Memory struct {
 	storeBase
-	v map[string][]byte
+	v    map[string][]byte
+	meta map[string]string
+}
+
+func (m *Memory) Type() string {
+	return "memory"
+}
+
+func (m *Memory) MetaData() map[string]string {
+	m.RLock()
+	defer m.RUnlock()
+	if m.parentStore != nil {
+		return m.parentStore.(*File).MetaData()
+	}
+	res := map[string]string{}
+	for k, v := range m.meta {
+		res[k] = v
+	}
+	return res
+}
+
+func (m *Memory) SetMetaData(vals map[string]string) error {
+	m.Lock()
+	defer m.Unlock()
+	if m.parentStore != nil {
+		return m.parentStore.(*File).SetMetaData(vals)
+	}
+	m.meta = map[string]string{}
+	for k, v := range vals {
+		m.meta[k] = v
+	}
+	return nil
 }
 
 func (m *Memory) Open(codec Codec) error {

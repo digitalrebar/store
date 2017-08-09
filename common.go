@@ -110,6 +110,16 @@ type Store interface {
 	// Close closes the store.  Attempting to perfrom operations on
 	// a closed store will panic.
 	Close()
+	// Type is the type of Store this is.
+	Type() string
+}
+
+// MetaSaver is a Store that is capable of of recording
+// metadata about itself.
+type MetaSaver interface {
+	Store
+	MetaData() map[string]string
+	SetMetaData(map[string]string) error
 }
 
 type parentSetter interface {
@@ -142,7 +152,6 @@ type storeBase struct {
 	Codec
 	readOnly    bool
 	opened      bool
-	storeType   string
 	subStores   map[string]Store
 	parentStore Store
 	closer      func()

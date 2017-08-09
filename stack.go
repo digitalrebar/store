@@ -12,6 +12,10 @@ type StackedStore struct {
 	keys   map[string]int
 }
 
+func (s *StackedStore) Type() string {
+	return "stacked"
+}
+
 func (s *StackedStore) Open(codec Codec) error {
 	s.Codec = codec
 	s.stores = []Store{}
@@ -76,6 +80,14 @@ func (s *StackedStore) Push(stores ...Store) error {
 		addSub(s, sub, k)
 	}
 	return nil
+}
+
+func (s *StackedStore) Layers() []Store {
+	s.Lock()
+	defer s.Unlock()
+	res := make([]Store, len(s.stores))
+	copy(res, s.stores)
+	return res
 }
 
 // MakeSub on a StackedStore is not allowed.

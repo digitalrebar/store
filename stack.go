@@ -68,10 +68,12 @@ func (s *StackedStore) Push(stores ...Store) error {
 	}
 	// Update or create new subs as needed.
 	for k, v := range subStacks {
-		sub := s.subStores[k].(*StackedStore)
-		if sub == nil {
+		var sub *StackedStore
+		if obj, ok := s.subStores[k]; !ok {
 			sub = &StackedStore{}
 			sub.Open(s.Codec)
+		} else {
+			sub = obj.(*StackedStore)
 		}
 		if err := sub.Push(v...); err != nil {
 			return err

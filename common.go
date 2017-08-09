@@ -51,6 +51,8 @@ func Open(locator string) (Store, error) {
 	}
 	var res Store
 	switch uri.Scheme {
+	case "stack":
+		res = &StackedStore{}
 	case "file":
 		res = &File{Path: uri.Path}
 	case "directory":

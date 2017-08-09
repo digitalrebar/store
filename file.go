@@ -207,7 +207,7 @@ func (f *File) save() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(f.Path, buf, 0644)
+	return safeReplace(f.Path, buf)
 }
 
 func (f *File) Save(key string, val interface{}) error {

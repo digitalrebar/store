@@ -196,18 +196,7 @@ func (f *Directory) Save(key string, val interface{}) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.Create(f.name(key + f.Ext()))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.Write(buf)
-	if err != nil {
-		os.Remove(file.Name())
-		return err
-	}
-	file.Sync()
-	return nil
+	return safeReplace(f.name(key+f.Ext()), buf)
 }
 
 func (f *Directory) Remove(key string) error {

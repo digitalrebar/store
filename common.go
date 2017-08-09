@@ -2,9 +2,21 @@ package store
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 )
+
+func safeReplace(name string, contents []byte) error {
+	tmpName := path.Join(path.Dir(name), ".new."+path.Base(name))
+	if err := ioutil.WriteFile(tmpName, contents, 0644); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, name)
+}
 
 // Open a store via URI style locator. Locators have the following format:
 //

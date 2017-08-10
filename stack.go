@@ -1,13 +1,30 @@
 package store
 
+import (
+	"fmt"
+	"strings"
+)
+
+type layerFlags struct {
+	// Test to see if layers from n-1..0 have the same key.  If they do,
+	// then the keys will override this one, violating the stack sanity
+	// checking rules.
+	keysCannotBeOverridden bool
+	// Test to see if layers from n+1..len(stack) have this key.  If
+	// they do, then this key will override that key, violating the
+	// stack sanity checking rules.
+	keysCannotOverride bool
+}
+
 // StackedStore is a store that represents the combination of several
 // stores stacked together.  The first store in the stack is the only
 // one that is writable, and the rest are set as read-only.
 // StackedStores are initally created empty.
 type StackedStore struct {
 	storeBase
-	stores []Store
-	keys   map[string]int
+	stores     []Store
+	storeFlags []layerFlags
+	keys       map[string]int
 }
 
 func (s *StackedStore) Type() string {
@@ -17,6 +34,7 @@ func (s *StackedStore) Type() string {
 func (s *StackedStore) Open(codec Codec) error {
 	s.Codec = codec
 	s.stores = []Store{}
+	s.storeFlags = []layerFlags{}
 	s.keys = map[string]int{}
 	s.opened = true
 	s.closer = func() {
@@ -27,58 +45,121 @@ func (s *StackedStore) Open(codec Codec) error {
 	return nil
 }
 
-// Push adds a Store to the stack of stores in this stack.  Any Store
-// but the inital one will be marked as read-only.
-func (s *StackedStore) Push(stores ...Store) error {
-	if len(stores) == 0 {
-		return nil
+type pushTracker struct {
+	*StackedStore
+	newLayer     Store
+	newLayerKeys []string
+	err          error
+	newSub       bool
+	pushing      bool
+	subTrackers  map[string]*pushTracker
+}
+
+func (pt *pushTracker) unlock() {
+	for _, v := range pt.subTrackers {
+		v.unlock()
 	}
+	pt.newLayer.RUnlock()
+	if len(pt.stores) > 1 && pt.pushing {
+		pt.newLayer.SetReadOnly()
+	}
+	pt.Unlock()
+}
+
+func (pt *pushTracker) push(kCBO, kCO bool) {
+	pt.pushing = true
+	for k, st := range pt.subTrackers {
+		st.push(kCBO, kCO)
+		if st.newSub {
+			addSub(pt.StackedStore, st.StackedStore, k)
+		}
+	}
+	newFlags := layerFlags{
+		keysCannotBeOverridden: kCBO,
+		keysCannotOverride:     kCO,
+	}
+	pt.storeFlags = append(pt.storeFlags, newFlags)
+	pt.stores = append(pt.stores, pt.newLayer)
+	for _, key := range pt.newLayerKeys {
+		if _, ok := pt.keys[key]; !ok {
+			pt.keys[key] = len(pt.stores) - 1
+		}
+	}
+}
+
+type StackPushError string
+
+func (s StackPushError) Error() string {
+	return string(s)
+}
+
+func (s *StackedStore) pushOK(layer Store, kCBO, kCO bool) (res *pushTracker) {
 	s.Lock()
-	defer s.Unlock()
+	layer.RLock()
 	s.panicIfClosed()
-	oldLen := len(s.stores)
-	s.stores = append(s.stores, stores...)
-	// Cache the top store for quick access
-	for i := oldLen; i == len(s.stores); i++ {
-		if i > 0 {
-			s.stores[i].SetReadOnly()
+	if layer.Closed() {
+		panic("Cannot push a closed store")
+	}
+	res = &pushTracker{
+		StackedStore: s,
+		newLayer:     layer,
+		subTrackers:  map[string]*pushTracker{},
+	}
+	res.newLayerKeys, res.err = layer.Keys()
+	if res.err != nil {
+		return
+	}
+	badKeys := []string{}
+	for _, k := range res.newLayerKeys {
+		i, ok := s.keys[k]
+		if !ok {
+			// New key.  Cannot be overridden, and nothing else would override it that should not.
+			continue
+		}
+		if kCBO {
+			badKeys = append(badKeys,
+				fmt.Sprintf("keysCannotBeOverridden: %s is already in layer %d", k, i))
+		}
+		if s.storeFlags[i].keysCannotOverride {
+			badKeys = append(badKeys,
+				fmt.Sprintf("keysCannotOverride: %s would be overridden by layer %d", k, i))
 		}
 	}
-	// Update the key mappings
-	subStacks := map[string][]Store{}
-	for i, item := range stores {
-		newKeys, err := item.Keys()
-		if err != nil {
-			return err
-		}
-		for _, k := range newKeys {
-			if _, ok := s.keys[k]; !ok {
-				s.keys[k] = i + oldLen
-			}
-		}
-		for k, v := range item.Subs() {
-			if _, ok := subStacks[k]; !ok {
-				subStacks[k] = []Store{v}
-			} else {
-				subStacks[k] = append(subStacks[k], v)
-			}
-		}
+	if len(badKeys) != 0 {
+		res.err = StackPushError(fmt.Sprintf("New layer violates key restrictions: %s", strings.Join(badKeys, "\n\t")))
+		return
 	}
-	// Update or create new subs as needed.
-	for k, v := range subStacks {
-		var sub *StackedStore
-		if obj, ok := s.subStores[k]; !ok {
-			sub = &StackedStore{}
-			sub.Open(s.Codec)
+	for k, v := range layer.Subs() {
+		var subPT *pushTracker
+		if subStore, ok := s.subStores[k]; !ok {
+			newStore := &StackedStore{}
+			newStore.Open(s.Codec)
+			subPT = newStore.pushOK(v, kCBO, kCO)
+			subPT.newSub = true
 		} else {
-			sub = obj.(*StackedStore)
+			subPT = subStore.(*StackedStore).pushOK(v, kCBO, kCO)
 		}
-		if err := sub.Push(v...); err != nil {
-			return err
+		res.subTrackers[k] = subPT
+		if subPT.err != nil {
+			res.err = subPT.err
+			return
 		}
-		sub.closer = nil
-		addSub(s, sub, k)
 	}
+	return
+}
+
+// Push adds a Store to the stack of stores in this stack.  Any Store
+// but the inital one will be marked as read-only.  Either the Push
+// call succeeds, or nothing about any of the Stores that are part of
+// the Push operation change and the error contains details about what
+// went wrong.
+func (s *StackedStore) Push(layer Store, keysCannotBeOverridden, keysCannotOverride bool) error {
+	tracker := s.pushOK(layer, keysCannotBeOverridden, keysCannotOverride)
+	defer tracker.unlock()
+	if tracker.err != nil {
+		return tracker.err
+	}
+	tracker.push(keysCannotBeOverridden, keysCannotOverride)
 	return nil
 }
 
@@ -90,7 +171,6 @@ func (s *StackedStore) Layers() []Store {
 	return res
 }
 
-// MakeSub on a StackedStore is not allowed.
 func (s *StackedStore) MakeSub(st string) (Store, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -99,6 +179,8 @@ func (s *StackedStore) MakeSub(st string) (Store, error) {
 	var err error
 	if sub, ok := s.subStores[st]; ok {
 		mySub = sub.(*StackedStore)
+		mySub.Lock()
+		defer mySub.Unlock()
 	}
 	sub := s.stores[0].GetSub(st)
 	if sub != nil && mySub != nil {
@@ -110,23 +192,24 @@ func (s *StackedStore) MakeSub(st string) (Store, error) {
 			return nil, err
 		}
 	}
-	if mySub == nil {
-		mySub = &StackedStore{}
-		mySub.Open(s.Codec)
-		if err := mySub.Push(sub); err != nil {
-			return nil, err
-		}
-		addSub(s, mySub, st)
-		return mySub, nil
-	}
-	subStores := []Store{sub}
-	subStores = append(subStores, mySub.stores...)
 	newSub := &StackedStore{}
 	newSub.Open(s.Codec)
-	if err := newSub.Push(subStores...); err != nil {
+	err = newSub.Push(sub,
+		s.storeFlags[0].keysCannotBeOverridden,
+		s.storeFlags[0].keysCannotOverride)
+	if err != nil {
 		return nil, err
 	}
-	mySub.opened = false
+	if mySub != nil {
+		for i, sub := range mySub.stores {
+			kCBO := mySub.storeFlags[i].keysCannotBeOverridden
+			kCO := mySub.storeFlags[i].keysCannotOverride
+			if err := newSub.Push(sub, kCBO, kCO); err != nil {
+				return nil, err
+			}
+		}
+		mySub.opened = false
+	}
 	addSub(s, newSub, st)
 	return newSub, nil
 }
@@ -151,9 +234,31 @@ func (s *StackedStore) Load(key string, val interface{}) error {
 	return s.stores[idx].Load(key, val)
 }
 
+type StackCannotOverride string
+
+func (s StackCannotOverride) Error() string {
+	return string(s)
+}
+
+type StackCannotBeOverridden string
+
+func (s StackCannotBeOverridden) Error() string {
+	return string(s)
+}
+
 func (s *StackedStore) Save(key string, val interface{}) error {
 	s.RLock()
 	defer s.RUnlock()
+	idx, ok := s.keys[key]
+	if ok && idx != 0 {
+		// Key already exists.  Can it be overridden?
+		if s.storeFlags[idx].keysCannotBeOverridden {
+			return StackCannotBeOverridden(key)
+		}
+		if s.storeFlags[0].keysCannotOverride {
+			return StackCannotOverride(key)
+		}
+	}
 	err := s.stores[0].Save(key, val)
 	if err == nil {
 		s.keys[key] = 0

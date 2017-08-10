@@ -80,7 +80,7 @@ func (f *File) open(vals map[string]interface{}) error {
 	f.meta = map[string]string{}
 	for k, v := range vals {
 		switch k {
-		case "$sections":
+		case "sections":
 			subSections, ok := v.(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("Invalid sections declaration: %#v", v)
@@ -93,7 +93,7 @@ func (f *File) open(vals map[string]interface{}) error {
 				}
 				addSub(f, sub, subName)
 			}
-		case "$meta":
+		case "meta":
 			metaData, ok := v.(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("Invalid metadata declaration: %#v", v)
@@ -188,10 +188,10 @@ func (f *File) prepSave() (map[string]interface{}, error) {
 			}
 			subs[subName] = subVals
 		}
-		res["$sections"] = subs
+		res["sections"] = subs
 	}
 	if len(f.meta) > 0 {
-		res["$meta"] = f.meta
+		res["meta"] = f.meta
 	}
 	return res, nil
 }

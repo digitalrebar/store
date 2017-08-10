@@ -87,6 +87,12 @@ func (pt *pushTracker) push(kCBO, kCO bool) {
 	}
 }
 
+type StackPushError string
+
+func (s StackPushError) Error() string {
+	return string(s)
+}
+
 func (s *StackedStore) pushOK(layer Store, kCBO, kCO bool) (res *pushTracker) {
 	s.Lock()
 	layer.RLock()
@@ -120,7 +126,7 @@ func (s *StackedStore) pushOK(layer Store, kCBO, kCO bool) (res *pushTracker) {
 		}
 	}
 	if len(badKeys) != 0 {
-		res.err = fmt.Errorf("New layer violates key restrictions: %s", strings.Join(badKeys, "\n\t"))
+		res.err = StackPushError(fmt.Sprintf("New layer violates key restrictions: %s", strings.Join(badKeys, "\n\t")))
 		return
 	}
 	for k, v := range layer.Subs() {
@@ -196,10 +202,9 @@ func (s *StackedStore) MakeSub(st string) (Store, error) {
 	}
 	if mySub != nil {
 		for i, sub := range mySub.stores {
-			subStore := sub.(*StackedStore)
-			kCBO := subStore.storeFlags[i].keysCannotBeOverridden
-			kCO := subStore.storeFlags[i].keysCannotOverride
-			if err := newSub.Push(subStore, kCBO, kCO); err != nil {
+			kCBO := mySub.storeFlags[i].keysCannotBeOverridden
+			kCO := mySub.storeFlags[i].keysCannotOverride
+			if err := newSub.Push(sub, kCBO, kCO); err != nil {
 				return nil, err
 			}
 		}
@@ -229,15 +234,29 @@ func (s *StackedStore) Load(key string, val interface{}) error {
 	return s.stores[idx].Load(key, val)
 }
 
+type StackCannotOverride string
+
+func (s StackCannotOverride) Error() string {
+	return string(s)
+}
+
+type StackCannotBeOverridden string
+
+func (s StackCannotBeOverridden) Error() string {
+	return string(s)
+}
+
 func (s *StackedStore) Save(key string, val interface{}) error {
 	s.RLock()
 	defer s.RUnlock()
 	idx, ok := s.keys[key]
 	if ok && idx != 0 {
 		// Key already exists.  Can it be overridden?
-		if s.storeFlags[idx].keysCannotBeOverridden ||
-			s.storeFlags[0].keysCannotOverride {
-			return UnWritable(key)
+		if s.storeFlags[idx].keysCannotBeOverridden {
+			return StackCannotBeOverridden(key)
+		}
+		if s.storeFlags[0].keysCannotOverride {
+			return StackCannotOverride(key)
 		}
 	}
 	err := s.stores[0].Save(key, val)

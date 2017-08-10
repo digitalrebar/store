@@ -232,6 +232,14 @@ func (s *StackedStore) Load(key string, val interface{}) error {
 func (s *StackedStore) Save(key string, val interface{}) error {
 	s.RLock()
 	defer s.RUnlock()
+	idx, ok := s.keys[key]
+	if ok && idx != 0 {
+		// Key already exists.  Can it be overridden?
+		if s.storeFlags[idx].keysCannotBeOverridden ||
+			s.storeFlags[0].keysCannotOverride {
+			return UnWritable(key)
+		}
+	}
 	err := s.stores[0].Save(key, val)
 	if err == nil {
 		s.keys[key] = 0

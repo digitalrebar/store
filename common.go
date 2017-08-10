@@ -105,6 +105,9 @@ func Open(locator string) (Store, error) {
 // storage needs.  Each Store (including ones created with MakeSub()
 // should operate as seperate, flat key/value stores.
 type Store interface {
+	sync.Locker
+	RLock()
+	RUnlock()
 	// Open opens the store for use.
 	Open(Codec) error
 	// GetSub fetches an already-existing substore.  nil means there is no such substore.
@@ -136,6 +139,8 @@ type Store interface {
 	// Close closes the store.  Attempting to perfrom operations on
 	// a closed store will panic.
 	Close()
+	// Closed returns whether or not a store is Closed
+	Closed() bool
 	// Type is the type of Store this is.
 	Type() string
 }
@@ -264,6 +269,10 @@ func (s *storeBase) Parent() Store {
 	defer s.RUnlock()
 	s.panicIfClosed()
 	return s.parentStore.(Store)
+}
+
+func (s *storeBase) Closed() bool {
+	return !s.opened
 }
 
 func (s *storeBase) setParent(p Store) {

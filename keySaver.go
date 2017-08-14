@@ -81,6 +81,15 @@ type BeforeSaveHooker interface {
 	BeforeSave() error
 }
 
+// SaveCleanHooker is the interface things can satisfy if they have
+// parts that should not be persisted.  It is called immediately
+// before the object is saved, and after BeforeSaveHooker finshes.
+// It should return a copy of itself that has been "cleaned up".
+type SaveCleanHooker interface {
+	KeySaver
+	SaveClean() KeySaver
+}
+
 // AfterSaveHooker is the interface things can satisfy if they want to
 // perfrom an action after an object is saved to the Backend().
 // AfterSave() will be called after the object has been sucessfully
@@ -151,7 +160,11 @@ func save(s Store, k KeySaver) (bool, error) {
 			return false, err
 		}
 	}
-	if err := s.Save(k.Key(), k); err != nil {
+	toSave := k
+	if alt, ok := k.(SaveCleanHooker); ok {
+		toSave = alt.SaveClean()
+	}
+	if err := s.Save(toSave.Key(), toSave); err != nil {
 		return false, err
 	}
 	if h, ok := k.(AfterSaveHooker); ok {

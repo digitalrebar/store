@@ -20,7 +20,6 @@ type KeySaver interface {
 	Prefix() string
 	Key() string
 	New() KeySaver
-	Backend() Store
 }
 
 //LoadHooker is the interface that things can satisfy if they want to
@@ -104,8 +103,7 @@ func load(s Store, k KeySaver, key string, runhook bool) (bool, error) {
 
 // List returns a slice of KeySavers, which can then be cast
 // back to whatever type is appropriate by the calling code.
-func List(ref KeySaver) ([]KeySaver, error) {
-	s := ref.Backend()
+func List(s Store, ref KeySaver) ([]KeySaver, error) {
 	keys, err := s.Keys()
 	if err != nil {
 		return nil, err
@@ -117,11 +115,6 @@ func List(ref KeySaver) ([]KeySaver, error) {
 		if err != nil {
 			return nil, err
 		}
-		if h, ok := v.(LoadHooker); ok {
-			if err := h.OnLoad(); err != nil {
-				return nil, err
-			}
-		}
 		res[i] = v
 	}
 	return res, nil
@@ -130,15 +123,14 @@ func List(ref KeySaver) ([]KeySaver, error) {
 // Load fetches the backing value of k from s.  The bool indicates
 // whether the value was loaded, and error contains the last error
 // that occurred during the load process.
-func Load(k KeySaver) (bool, error) {
-	return load(k.Backend(), k, k.Key(), true)
+func Load(s Store, k KeySaver) (bool, error) {
+	return load(s, k, k.Key(), true)
 }
 
 // Remove removes k from s.  The bool indicates whether the value was
 // removed, and the error contains the last error that occurred during
 // the removal process.
-func Remove(k KeySaver) (bool, error) {
-	s := k.Backend()
+func Remove(s Store, k KeySaver) (bool, error) {
 	if h, ok := k.(BeforeDeleteHooker); ok {
 		if err := h.BeforeDelete(); err != nil {
 			return false, err
@@ -172,16 +164,14 @@ func save(s Store, k KeySaver) (bool, error) {
 // Save saves k in s, overwriting anything else that may be there.
 // The bool indicates that the object was saved, and the error
 // contains the last error that occurred..
-func Save(k KeySaver) (bool, error) {
-	s := k.Backend()
+func Save(s Store, k KeySaver) (bool, error) {
 	return save(s, k)
 }
 
 // Create saves k in s, with the caveat that k must not already be
 // present in s.  The bool indicates that the object was saved, and
 // the error indicates the last error that occurred.
-func Create(k KeySaver) (bool, error) {
-	s := k.Backend()
+func Create(s Store, k KeySaver) (bool, error) {
 	v := k.New()
 	if ok, _ := load(s, v, k.Key(), false); ok {
 		return false, fmt.Errorf("Create: thing %s:%s already exists", k.Prefix(), k.Key())
@@ -197,8 +187,7 @@ func Create(k KeySaver) (bool, error) {
 // Update saves k in s, with the caveat that s must already contain an
 // older version of k.  If k implements ChangeHooker, then it will be
 // called with the version that already exists in the backing store.
-func Update(k KeySaver) (bool, error) {
-	s := k.Backend()
+func Update(s Store, k KeySaver) (bool, error) {
 	v := k.New()
 	if ok, _ := load(s, v, k.Key(), false); !ok {
 		return false, fmt.Errorf("Update: %s:%s does not already exist", k.Prefix(), k.Key())

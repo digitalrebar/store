@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	currentStore Store
-	failed       = errors.New("Failed hook")
+	failed = errors.New("Failed hook")
 )
 
 type TestVal struct {
@@ -39,10 +38,6 @@ func (t *TestVal) Key() string {
 
 func (t *TestVal) New() KeySaver {
 	return &TestVal{}
-}
-
-func (t *TestVal) Backend() Store {
-	return currentStore
 }
 
 func (t *TestVal) OnLoad() error {
@@ -73,7 +68,7 @@ func (t *TestVal) AfterSave() {
 	t.doHook("AfterSave")
 }
 
-type op func(KeySaver) (bool, error)
+type op func(Store, KeySaver) (bool, error)
 type test struct {
 	op       op
 	name     string
@@ -120,7 +115,7 @@ var roTests = []test{
 	test{op(Remove), "Remove Nonexistent Fail", &ntv, false, false, "BeforeDelete"},
 }
 
-func runTests(t *testing.T, toRun []test) {
+func runTests(t *testing.T, backend Store, toRun []test) {
 	for _, s := range toRun {
 		expectedTo := "fail"
 		if s.pass {
@@ -129,7 +124,7 @@ func runTests(t *testing.T, toRun []test) {
 		actuallyDid := "fail"
 		s.val.hook = ""
 		s.val.failHook = s.hookFail
-		ok, err := s.op(s.val)
+		ok, err := s.op(backend, s.val)
 		if ok {
 			actuallyDid = "pass"
 		}
@@ -165,41 +160,40 @@ func runTests(t *testing.T, toRun []test) {
 
 // Expects a freshly-created store
 func testOneStore(t *testing.T, s Store) {
-	currentStore = s
-	runTests(t, tests)
+	runTests(t, s, tests)
 	// At the end, the store should be empty
-	ents, err := currentStore.Keys()
+	ents, err := s.Keys()
 	if err != nil {
 		t.Errorf("Error listing store: %v", err)
 	} else if len(ents) != 0 {
 		t.Errorf("Too many entries in store: wanted 0, got %d", len(ents))
 	}
-	ok, err := Create(&tv)
+	ok, err := Create(s, &tv)
 	if !ok {
 		t.Errorf("Failed to create an entry for the list test: %v", err)
 	}
-	nents, err := List(&tv)
+	nents, err := List(s, &tv)
 	if err != nil {
 		t.Errorf("Error listing the entries for the list test: %v", err)
 	} else if len(nents) != 1 {
 		t.Errorf("Expected 1 entry, got %d", len(nents))
 	}
-	keys, err := currentStore.Keys()
+	keys, err := s.Keys()
 	if err != nil {
 		t.Errorf("Error getting keys for the keys test: %v", err)
 	} else if len(keys) != 1 {
 		t.Errorf("Expected 1 key, got %d", len(keys))
 	}
 	for _, k := range keys {
-		if err := currentStore.Remove(k); err != nil {
+		if err := s.Remove(k); err != nil {
 			t.Errorf("Error removing key %s", k)
 		}
 	}
-	runTests(t, createTests)
-	if !currentStore.SetReadOnly() {
+	runTests(t, s, createTests)
+	if !s.SetReadOnly() {
 		t.Errorf("Unable to set store to read only")
 	}
-	runTests(t, roTests)
+	runTests(t, s, roTests)
 }
 
 func testStore(t *testing.T, s Store) {

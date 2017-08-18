@@ -120,8 +120,8 @@ func List(s Store, ref KeySaver) ([]KeySaver, error) {
 	res := make([]KeySaver, len(keys))
 	for i, k := range keys {
 		v := ref.New()
-		err = s.Load(k, &v)
-		if err != nil {
+		ok, err := load(s, v, k, true)
+		if !ok {
 			return nil, err
 		}
 		res[i] = v

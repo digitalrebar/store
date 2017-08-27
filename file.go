@@ -165,7 +165,13 @@ func (f *File) Load(key string, val interface{}) error {
 	f.panicIfClosed()
 	buf, ok := f.vals[key]
 	if ok {
-		return f.Decode(buf, val)
+		if err := f.Decode(buf, val); err != nil {
+			return err
+		}
+		if ro, ok := val.(ReadOnlySetter); ok {
+			ro.SetReadOnly(f.ReadOnly())
+		}
+		return nil
 	}
 	return NotFound(key)
 }

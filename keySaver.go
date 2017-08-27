@@ -99,6 +99,12 @@ type AfterSaveHooker interface {
 	AfterSave()
 }
 
+// When loading an object, the store should
+// set the current readonly state on the object.
+type ReadOnlySetter interface {
+	SetReadOnly(bool)
+}
+
 func load(s Store, k KeySaver, key string, runhook bool) (bool, error) {
 	err := s.Load(key, k)
 	if err != nil {

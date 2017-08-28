@@ -196,7 +196,13 @@ func (b *Bolt) Load(key string, val interface{}) error {
 	if err != nil {
 		return err
 	}
-	return b.Decode(res, val)
+	if err := b.Decode(res, val); err != nil {
+		return err
+	}
+	if ro, ok := val.(ReadOnlySetter); ok {
+		ro.SetReadOnly(b.ReadOnly())
+	}
+	return nil
 }
 
 func (b *Bolt) Save(key string, val interface{}) error {

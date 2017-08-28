@@ -80,7 +80,13 @@ func (m *Memory) Load(key string, val interface{}) error {
 	if !ok {
 		return NotFound(key)
 	}
-	return m.Decode(v, val)
+	if err := m.Decode(v, val); err != nil {
+		return err
+	}
+	if ro, ok := val.(ReadOnlySetter); ok {
+		ro.SetReadOnly(m.ReadOnly())
+	}
+	return nil
 }
 
 func (m *Memory) Save(key string, val interface{}) error {

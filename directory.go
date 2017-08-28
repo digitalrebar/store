@@ -187,7 +187,13 @@ func (f *Directory) Load(key string, val interface{}) error {
 	if err != nil {
 		return err
 	}
-	return f.Decode(buf, val)
+	if err := f.Decode(buf, val); err != nil {
+		return err
+	}
+	if ro, ok := val.(ReadOnlySetter); ok {
+		ro.SetReadOnly(f.ReadOnly())
+	}
+	return nil
 }
 
 func (f *Directory) Save(key string, val interface{}) error {

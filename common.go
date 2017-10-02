@@ -37,7 +37,6 @@ func safeReplace(name string, contents []byte) error {
 //     top-level bucket data is stored in.
 //   * memory, in which path does not mean anything.
 //
-
 func Open(locator string) (Store, error) {
 	uri, err := url.Parse(locator)
 	if err != nil {
@@ -110,6 +109,8 @@ type Store interface {
 	RUnlock()
 	// Open opens the store for use.
 	Open(Codec) error
+	// GetCodec returns the codec that the open store uses for marshalling and unmarshalling data
+	GetCodec() Codec
 	// GetSub fetches an already-existing substore.  nil means there is no such substore.
 	GetSub(string) Store
 	// MakeSub returns a Store that is subordinate to this one.
@@ -214,6 +215,10 @@ func (s *storeBase) Close() {
 	s.Unlock()
 	parent.Close()
 	return
+}
+
+func (s *storeBase) GetCodec() Codec {
+	return s.Codec
 }
 
 func (s *storeBase) panicIfClosed() {

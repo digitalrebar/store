@@ -37,7 +37,6 @@ func safeReplace(name string, contents []byte) error {
 //     top-level bucket data is stored in.
 //   * memory, in which path does not mean anything.
 //
-
 func Open(locator string) (Store, error) {
 	uri, err := url.Parse(locator)
 	if err != nil {
@@ -110,6 +109,8 @@ type Store interface {
 	RUnlock()
 	// Open opens the store for use.
 	Open(Codec) error
+	// GetCodec returns the codec that the open store uses for marshalling and unmarshalling data
+	GetCodec() Codec
 	// GetSub fetches an already-existing substore.  nil means there is no such substore.
 	GetSub(string) Store
 	// MakeSub returns a Store that is subordinate to this one.
@@ -151,6 +152,43 @@ type MetaSaver interface {
 	Store
 	MetaData() map[string]string
 	SetMetaData(map[string]string) error
+}
+
+// Copy copies all of the contents from src to dest, including substores and
+// metadata.  If dst starts out empty, then dst will wind up being a clone of src.
+func Copy(dst, src Store) error {
+	src.RLock()
+	defer src.RUnlock()
+	dmeta, dok := dst.(MetaSaver)
+	smeta, sok := src.(MetaSaver)
+	if dok && sok {
+		if err := dmeta.SetMetaData(smeta.MetaData()); err != nil {
+			return err
+		}
+	}
+	keys, err := src.Keys()
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		var val interface{}
+		if err := src.Load(key, &val); err != nil {
+			return err
+		}
+		if err := dst.Save(key, val); err != nil {
+			return err
+		}
+	}
+	for k, sub := range src.Subs() {
+		subDst, err := dst.MakeSub(k)
+		if err != nil {
+			return err
+		}
+		if err := Copy(subDst, sub); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type parentSetter interface {
@@ -214,6 +252,10 @@ func (s *storeBase) Close() {
 	s.Unlock()
 	parent.Close()
 	return
+}
+
+func (s *storeBase) GetCodec() Codec {
+	return s.Codec
 }
 
 func (s *storeBase) panicIfClosed() {

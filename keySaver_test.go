@@ -276,6 +276,11 @@ func testPersistent(t *testing.T, storeType, storeCodec string) {
 			t.Errorf("Metadata did not persist")
 		}
 	}
+	t.Log("Testing copy capabilities")
+	dst, _ := Open("memory:///")
+	if err := Copy(dst, s); err != nil {
+		t.Errorf("Error copying stores: %v", err)
+	}
 	t.Logf("Persistent test finished")
 }
 

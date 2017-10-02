@@ -154,6 +154,43 @@ type MetaSaver interface {
 	SetMetaData(map[string]string) error
 }
 
+// Copy copies all of the contents from src to dest, including substores and
+// metadata.  If dst starts out empty, then dst will wind up being a clone of src.
+func Copy(dst, src Store) error {
+	src.RLock()
+	defer src.RUnlock()
+	dmeta, dok := dst.(MetaSaver)
+	smeta, sok := src.(MetaSaver)
+	if dok && sok {
+		if err := dmeta.SetMetaData(smeta.MetaData()); err != nil {
+			return err
+		}
+	}
+	keys, err := src.Keys()
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		var val interface{}
+		if err := src.Load(key, &val); err != nil {
+			return err
+		}
+		if err := dst.Save(key, val); err != nil {
+			return err
+		}
+	}
+	for k, sub := range src.Subs() {
+		subDst, err := dst.MakeSub(k)
+		if err != nil {
+			return err
+		}
+		if err := Copy(subDst, sub); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type parentSetter interface {
 	setParent(Store)
 }

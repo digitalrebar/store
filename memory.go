@@ -16,7 +16,7 @@ func (m *Memory) MetaData() map[string]string {
 	m.RLock()
 	defer m.RUnlock()
 	if m.parentStore != nil {
-		return m.parentStore.(*File).MetaData()
+		return m.parentStore.(*Memory).MetaData()
 	}
 	res := map[string]string{}
 	for k, v := range m.meta {
@@ -29,7 +29,7 @@ func (m *Memory) SetMetaData(vals map[string]string) error {
 	m.Lock()
 	defer m.Unlock()
 	if m.parentStore != nil {
-		return m.parentStore.(*File).SetMetaData(vals)
+		return m.parentStore.(*Memory).SetMetaData(vals)
 	}
 	m.meta = map[string]string{}
 	for k, v := range vals {

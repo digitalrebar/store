@@ -55,6 +55,9 @@ func (m *Memory) MakeSub(loc string) (Store, error) {
 	m.Lock()
 	defer m.Unlock()
 	m.panicIfClosed()
+	if res, ok := m.subStores[loc]; ok {
+		return res, nil
+	}
 	res := &Memory{}
 	res.Open(m.Codec)
 	addSub(m, res, loc)

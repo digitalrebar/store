@@ -224,6 +224,19 @@ func (s *StackedStore) Keys() ([]string, error) {
 	return vals, nil
 }
 
+func (s *StackedStore) MetaFor(key string) map[string]string {
+	s.RLock()
+	defer s.RUnlock()
+	idx, ok := s.keys[key]
+	if !ok {
+		return map[string]string{}
+	}
+	if ms, ok := s.stores[idx].(MetaSaver); ok {
+		return ms.MetaData()
+	}
+	return map[string]string{}
+}
+
 func (s *StackedStore) Load(key string, val interface{}) error {
 	s.RLock()
 	defer s.RUnlock()

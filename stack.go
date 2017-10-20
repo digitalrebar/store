@@ -289,7 +289,11 @@ func (s *StackedStore) Remove(key string) error {
 	if idx != 0 {
 		return UnWritable(key)
 	}
-	return s.stores[0].Remove(key)
+	err := s.stores[0].Remove(key)
+	if err == nil {
+		delete(s.keys, key)
+	}
+	return err
 }
 
 func (s *StackedStore) ReadOnly() bool {

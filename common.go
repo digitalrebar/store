@@ -88,8 +88,8 @@ func Open(locator string) (Store, error) {
 	case "memory":
 		res = &Memory{}
 	}
-	if err != nil {
-		return nil, err
+	if res == nil {
+		return nil, fmt.Errorf("Unknown schema type: %s", uri.Scheme)
 	}
 	if err := res.Open(codec); err != nil {
 		return nil, err

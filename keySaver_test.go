@@ -36,6 +36,10 @@ func (t *TestVal) Key() string {
 	return t.Name
 }
 
+func (t *TestVal) KeyName() string {
+	return "Name"
+}
+
 func (t *TestVal) New() KeySaver {
 	return &TestVal{}
 }

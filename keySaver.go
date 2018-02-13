@@ -19,6 +19,7 @@ import "fmt"
 type KeySaver interface {
 	Prefix() string
 	Key() string
+	KeyName() string
 	New() KeySaver
 }
 

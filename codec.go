@@ -43,10 +43,14 @@ var JsonCodec = &codec{
 	ext: ".json",
 }
 
+func yamlDecode(buf []byte, d interface{}) error {
+	return yaml.Unmarshal(buf, d)
+}
+
 // YamlCodec implements a Codec for encoding/decoding to YAML
 var YamlCodec = &codec{
 	enc: yaml.Marshal,
-	dec: yaml.Unmarshal,
+	dec: yamlDecode,
 	ext: ".yaml",
 }
 

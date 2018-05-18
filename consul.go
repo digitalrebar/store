@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	consul "github.com/hashicorp/consul/api"
@@ -71,7 +72,7 @@ func (b *Consul) MakeSub(prefix string) (Store, error) {
 	if res, ok := b.subStores[prefix]; ok {
 		return res, nil
 	}
-	res := &Consul{Client: b.Client, BaseKey: b.BaseKey}
+	res := &Consul{Client: b.Client, BaseKey: filepath.Join(b.BaseKey, prefix)}
 	err := res.Open(b.Codec)
 	if err != nil {
 		return nil, err

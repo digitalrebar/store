@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	consul "github.com/hashicorp/consul/api"
@@ -22,6 +23,9 @@ type Consul struct {
 func (c *Consul) Open(codec Codec) error {
 	if c.BaseKey == "" {
 		return fmt.Errorf("Cannot store data at an empty location in the Consul KV store!")
+	}
+	if strings.HasPrefix(c.BaseKey, "/") {
+		c.BaseKey = strings.TrimPrefix(c.BaseKey, "/")
 	}
 	if codec == nil {
 		codec = DefaultCodec
@@ -71,7 +75,7 @@ func (b *Consul) MakeSub(prefix string) (Store, error) {
 	if res, ok := b.subStores[prefix]; ok {
 		return res, nil
 	}
-	res := &Consul{Client: b.Client, BaseKey: b.BaseKey}
+	res := &Consul{Client: b.Client, BaseKey: filepath.Join(b.BaseKey, prefix)}
 	err := res.Open(b.Codec)
 	if err != nil {
 		return nil, err

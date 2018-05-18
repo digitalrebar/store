@@ -24,6 +24,9 @@ func (c *Consul) Open(codec Codec) error {
 	if c.BaseKey == "" {
 		return fmt.Errorf("Cannot store data at an empty location in the Consul KV store!")
 	}
+	if strings.HasPrefix(c.BaseKey, "/") {
+		c.BaseKey = strings.TrimPrefix(c.BaseKey, "/")
+	}
 	if codec == nil {
 		codec = DefaultCodec
 	}

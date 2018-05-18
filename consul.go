@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"strings"
 
@@ -103,7 +104,7 @@ func (b *Consul) Load(key string, val interface{}) error {
 	b.panicIfClosed()
 	buf, _, err := b.Client.KV().Get(b.finalKey(key), nil)
 	if buf == nil {
-		return NotFound(key)
+		return os.ErrNotExist
 	}
 	if err != nil {
 		return err

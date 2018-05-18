@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -242,7 +243,7 @@ func (s *StackedStore) Load(key string, val interface{}) error {
 	defer s.RUnlock()
 	idx, ok := s.keys[key]
 	if !ok {
-		return NotFound(key)
+		return os.ErrNotExist
 	}
 	return s.stores[idx].Load(key, val)
 }
@@ -284,7 +285,7 @@ func (s *StackedStore) Remove(key string) error {
 	defer s.RUnlock()
 	idx, ok := s.keys[key]
 	if !ok {
-		return NotFound(key)
+		return os.ErrNotExist
 	}
 	if idx != 0 {
 		return UnWritable(key)

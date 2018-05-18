@@ -189,7 +189,7 @@ func (b *Bolt) Load(key string, val interface{}) error {
 		bucket := b.getBucket(tx)
 		res = bucket.Get([]byte(key))
 		if res == nil {
-			return NotFound(key)
+			return os.ErrNotExist
 		}
 		return nil
 	})
@@ -228,7 +228,7 @@ func (b *Bolt) Remove(key string) error {
 	return b.db.Update(func(tx *bolt.Tx) error {
 		bucket := b.getBucket(tx)
 		if res := bucket.Get([]byte(key)); res == nil {
-			return NotFound(key)
+			return os.ErrNotExist
 		}
 		return bucket.Delete([]byte(key))
 	})

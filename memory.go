@@ -1,5 +1,7 @@
 package store
 
+import "os"
+
 // MemoryStore provides an in-memory implementation of Store
 // for testing purposes
 type Memory struct {
@@ -81,7 +83,7 @@ func (m *Memory) Load(key string, val interface{}) error {
 	v, ok := m.v[key]
 	m.RUnlock()
 	if !ok {
-		return NotFound(key)
+		return os.ErrNotExist
 	}
 	if err := m.Decode(v, val); err != nil {
 		return err
@@ -119,5 +121,5 @@ func (m *Memory) Remove(key string) error {
 		delete(m.v, key)
 		return nil
 	}
-	return NotFound(key)
+	return os.ErrNotExist
 }

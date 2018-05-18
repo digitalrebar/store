@@ -173,7 +173,7 @@ func (f *File) Load(key string, val interface{}) error {
 		}
 		return nil
 	}
-	return NotFound(key)
+	return os.ErrNotExist
 }
 
 func (f *File) prepSave() (map[string]interface{}, error) {
@@ -242,7 +242,7 @@ func (f *File) Remove(key string) error {
 		return UnWritable(key)
 	}
 	if _, ok := f.vals[key]; !ok {
-		return NotFound(key)
+		return os.ErrNotExist
 	}
 	delete(f.vals, key)
 	return f.save()

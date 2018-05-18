@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -76,7 +77,7 @@ func TestStackSimple(t *testing.T) {
 	checkErr(t, StackCannotBeOverridden(""), st.Save("foo", &tobj))
 	checkErr(t, nil, st.Save("baz", &tobj))
 	checkErr(t, nil, st.Remove("baz"))
-	checkErr(t, NotFound(""), st.Remove("baz"))
+	checkErr(t, os.ErrNotExist, st.Remove("baz"))
 	checkErr(t, UnWritable(""), st.Remove("foo"))
 	checkErr(t, UnWritable(""), st.Remove("bar"))
 	sub, err := st.MakeSub("sub1")

@@ -161,7 +161,7 @@ func (b *Consul) SetMetaData(vals map[string]string) error {
 	b.Lock()
 	defer b.Unlock()
 	if b.parentStore != nil {
-		return b.parentStore.(*Directory).SetMetaData(vals)
+		return b.parentStore.(*Consul).SetMetaData(vals)
 	}
 	return b.Save("meta", vals)
 }

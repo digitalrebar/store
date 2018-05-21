@@ -144,3 +144,20 @@ func (b *Consul) Remove(key string) error {
 	_, err := b.Client.KV().Delete(b.finalKey(key), nil)
 	return err
 }
+
+func (b *Consul) MetaData() (res map[string]string) {
+	if b.parentStore != nil {
+		return b.parentStore.(*Consul).MetaData()
+	}
+
+	res = map[string]string{}
+	b.Load("meta", &res)
+	return res
+}
+
+func (b *Consul) SetMetaData(vals map[string]string) error {
+	if b.parentStore != nil {
+		return b.parentStore.(*Consul).SetMetaData(vals)
+	}
+	return b.Save("meta", vals)
+}

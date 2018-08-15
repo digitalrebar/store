@@ -160,6 +160,7 @@ func (f *Directory) Keys() ([]string, error) {
 		return nil, err
 	}
 	infos, err := d.Readdir(0)
+	d.Close()
 	if err != nil {
 		return nil, fmt.Errorf("dir keys: readdir error %#v", err)
 	}

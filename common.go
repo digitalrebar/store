@@ -2,7 +2,6 @@ package store
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -11,8 +10,17 @@ import (
 
 func safeReplace(name string, contents []byte) error {
 	tmpName := path.Join(path.Dir(name), ".new."+path.Base(name))
-	if err := ioutil.WriteFile(tmpName, contents, 0644); err != nil {
-		os.Remove(tmpName)
+	f, err := os.OpenFile(tmpName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
+	if err != nil {
+		return err
+	}
+	func() {
+		defer f.Close()
+		if _, err = f.Write(contents); err == nil {
+			err = f.Sync()
+		}
+	}()
+	if err != nil {
 		return err
 	}
 	return os.Rename(tmpName, name)

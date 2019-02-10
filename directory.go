@@ -20,7 +20,7 @@ func (d *Directory) Type() string {
 	return "directory"
 }
 
-func (f *Directory) name(n string) string {
+func (f *Directory) filename(n string) string {
 	return filepath.Join(f.Path, url.QueryEscape(n))
 }
 
@@ -74,11 +74,11 @@ func (d *Directory) SetMetaData(vals map[string]string) error {
 	}
 	written := map[string]struct{}{}
 	for k, v := range vals {
-		fileName := d.name("._" + k + ".meta")
+		fileName := d.filename("._" + k + ".meta")
 		if err := ioutil.WriteFile(fileName, []byte(v), 0644); err != nil {
 			panic(err.Error())
 		}
-		written[path.Base(d.name("._"+k+".meta"))] = struct{}{}
+		written[path.Base(d.filename("._"+k+".meta"))] = struct{}{}
 	}
 	// Clean out the metadata values we no longer want
 	dir, err := os.Open(d.Path)
@@ -98,6 +98,9 @@ func (d *Directory) SetMetaData(vals map[string]string) error {
 			continue
 		}
 		os.Remove(path.Join(d.Path, info.Name()))
+	}
+	if n, ok := vals["Name"]; ok {
+		d.name = n
 	}
 	return nil
 }
@@ -133,6 +136,10 @@ func (f *Directory) Open(codec Codec) error {
 				return err
 			}
 		}
+	}
+	md := f.MetaData()
+	if n, ok := md["Name"]; ok {
+		f.name = n
 	}
 	return nil
 }
@@ -184,7 +191,7 @@ func (f *Directory) Keys() ([]string, error) {
 
 func (f *Directory) Load(key string, val interface{}) error {
 	f.panicIfClosed()
-	buf, err := ioutil.ReadFile(f.name(key + f.Ext()))
+	buf, err := ioutil.ReadFile(f.filename(key + f.Ext()))
 	if err != nil {
 		return err
 	}
@@ -193,6 +200,12 @@ func (f *Directory) Load(key string, val interface{}) error {
 	}
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(f.ReadOnly())
+	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := f.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
 	}
 	return nil
 }
@@ -206,7 +219,7 @@ func (f *Directory) Save(key string, val interface{}) error {
 	if err != nil {
 		return err
 	}
-	return safeReplace(f.name(key+f.Ext()), buf)
+	return safeReplace(f.filename(key+f.Ext()), buf)
 }
 
 func (f *Directory) Remove(key string) error {
@@ -214,5 +227,5 @@ func (f *Directory) Remove(key string) error {
 	if f.ReadOnly() {
 		return UnWritable(key)
 	}
-	return os.Remove(f.name(key + f.Ext()))
+	return os.Remove(f.filename(key + f.Ext()))
 }

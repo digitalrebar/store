@@ -106,6 +106,12 @@ type ReadOnlySetter interface {
 	SetReadOnly(bool)
 }
 
+// When loading an object, the store should
+// set the current owner name.
+type BundleSetter interface {
+	SetBundle(string)
+}
+
 func load(s Store, k KeySaver, key string, runhook bool) (bool, error) {
 	err := s.Load(key, k)
 	if err != nil {

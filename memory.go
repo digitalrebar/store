@@ -37,6 +37,9 @@ func (m *Memory) SetMetaData(vals map[string]string) error {
 	for k, v := range vals {
 		m.meta[k] = v
 	}
+	if n, ok := vals["Name"]; ok {
+		m.name = n
+	}
 	return nil
 }
 
@@ -50,6 +53,10 @@ func (m *Memory) Open(codec Codec) error {
 	}
 	m.v = map[string][]byte{}
 	m.opened = true
+	md := m.MetaData()
+	if n, ok := md["Name"]; ok {
+		m.name = n
+	}
 	return nil
 }
 
@@ -90,6 +97,12 @@ func (m *Memory) Load(key string, val interface{}) error {
 	}
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(m.ReadOnly())
+	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := m.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
 	}
 	return nil
 }

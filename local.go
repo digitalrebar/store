@@ -51,6 +51,9 @@ func (b *Bolt) SetMetaData(vals map[string]string) error {
 				return err
 			}
 		}
+		if n, ok := vals["Name"]; ok {
+			b.name = n
+		}
 		return nil
 	})
 }
@@ -163,6 +166,10 @@ func (b *Bolt) Open(codec Codec) error {
 		b.db.Close()
 		b.db = nil
 	}
+	md := b.MetaData()
+	if n, ok := md["Name"]; ok {
+		b.name = n
+	}
 	return nil
 }
 
@@ -201,6 +208,12 @@ func (b *Bolt) Load(key string, val interface{}) error {
 	}
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(b.ReadOnly())
+	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := b.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
 	}
 	return nil
 }

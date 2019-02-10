@@ -48,6 +48,9 @@ func (f *File) SetMetaData(vals map[string]string) error {
 	if err != nil {
 		f.meta = oldMeta
 	}
+	if n, ok := vals["Name"]; ok {
+		f.name = n
+	}
 	return err
 }
 
@@ -114,6 +117,10 @@ func (f *File) open(vals map[string]interface{}) error {
 		}
 	}
 	f.opened = true
+	md := f.MetaData()
+	if n, ok := md["Name"]; ok {
+		f.name = n
+	}
 	return nil
 }
 
@@ -170,6 +177,12 @@ func (f *File) Load(key string, val interface{}) error {
 		}
 		if ro, ok := val.(ReadOnlySetter); ok {
 			ro.SetReadOnly(f.ReadOnly())
+		}
+		if bb, ok := val.(BundleSetter); ok {
+			n := f.Name()
+			if n != "" {
+				bb.SetBundle(n)
+			}
 		}
 		return nil
 	}

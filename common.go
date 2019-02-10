@@ -152,6 +152,8 @@ type Store interface {
 	Closed() bool
 	// Type is the type of Store this is.
 	Type() string
+	// Name is the name of Store this is.
+	Name() string
 }
 
 // MetaSaver is a Store that is capable of of recording
@@ -232,6 +234,14 @@ type storeBase struct {
 	subStores   map[string]Store
 	parentStore Store
 	closer      func()
+	name        string
+}
+
+func (s *storeBase) Name() string {
+	if s.parentStore != nil {
+		return s.parentStore.Name()
+	}
+	return s.name
 }
 
 func (s *storeBase) forceClose() {

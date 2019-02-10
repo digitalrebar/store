@@ -209,6 +209,12 @@ func (b *Bolt) Load(key string, val interface{}) error {
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(b.ReadOnly())
 	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := b.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
+	}
 	return nil
 }
 

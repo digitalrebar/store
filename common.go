@@ -152,7 +152,7 @@ type Store interface {
 	Closed() bool
 	// Type is the type of Store this is.
 	Type() string
-	// Name is the type of Store this is.
+	// Name is the name of Store this is.
 	Name() string
 }
 

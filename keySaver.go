@@ -117,12 +117,6 @@ func load(s Store, k KeySaver, key string, runhook bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if b, ok := k.(BundleSetter); ok {
-		n := s.Name()
-		if n != "" {
-			b.SetBundle(n)
-		}
-	}
 	if h, ok := k.(LoadHooker); runhook && ok {
 		return true, h.OnLoad()
 	}

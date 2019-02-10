@@ -201,6 +201,12 @@ func (f *Directory) Load(key string, val interface{}) error {
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(f.ReadOnly())
 	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := f.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
+	}
 	return nil
 }
 

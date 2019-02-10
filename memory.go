@@ -98,6 +98,12 @@ func (m *Memory) Load(key string, val interface{}) error {
 	if ro, ok := val.(ReadOnlySetter); ok {
 		ro.SetReadOnly(m.ReadOnly())
 	}
+	if bb, ok := val.(BundleSetter); ok {
+		n := m.Name()
+		if n != "" {
+			bb.SetBundle(n)
+		}
+	}
 	return nil
 }
 

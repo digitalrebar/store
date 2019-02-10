@@ -61,6 +61,10 @@ func (c *Consul) Open(codec Codec) error {
 	c.closer = func() {
 		c.Client = nil
 	}
+	md := c.MetaData()
+	if n, ok := md["Name"]; ok {
+		c.name = n
+	}
 	return nil
 }
 
@@ -158,6 +162,9 @@ func (b *Consul) MetaData() (res map[string]string) {
 func (b *Consul) SetMetaData(vals map[string]string) error {
 	if b.parentStore != nil {
 		return b.parentStore.(*Consul).SetMetaData(vals)
+	}
+	if n, ok := vals["Name"]; ok {
+		b.name = n
 	}
 	return b.Save("meta", vals)
 }
